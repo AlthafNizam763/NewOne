@@ -147,27 +147,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: const Icon(Icons.notifications_none_rounded),
             onPressed: () => context.push('/notification_settings'),
           ),
-          const SizedBox(width: 8),
-          PopupMenuButton<String>(
-            offset: const Offset(0, 44),
-            onSelected: (value) {
-              if (value == 'settings') setState(() => _selectedIndex = 4);
-              if (value == 'logout') {
-                ref.read(authControllerProvider.notifier).logout();
-                context.go('/login');
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'settings', child: Text('Settings')),
-              PopupMenuItem(value: 'logout', child: Text('Log Out')),
-            ],
-            child: CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.primaryDark,
-              backgroundImage: AvatarUtil.getAvatarProvider(
-                  FirebaseAuth.instance.currentUser?.email),
-            ),
-          ),
         ],
       ),
     );
@@ -197,14 +176,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               const SizedBox(height: 36),
               _buildSidebarItem(Icons.space_dashboard_rounded, 'Dashboard', 0),
-              _buildSidebarItem(Icons.chat_bubble_rounded, 'Open Chat', 1,
+              _buildSidebarItem(Icons.chat_bubble_rounded, 'Chat', 1,
                   onTap: () => context.push('/chat')),
-              _buildSidebarItem(Icons.call_rounded, 'Calls', 2,
-                  onTap: () => context.push('/calls')),
-              _buildSidebarItem(Icons.auto_stories_rounded, 'Stories', 3,
-                  onTap: () => context.push('/stories')),
               _buildSidebarItem(Icons.settings_rounded, 'Settings', 4),
               const Spacer(),
+              _buildProfileSidebarTile(),
+              const SizedBox(height: 8),
               _buildSidebarItem(
                 Icons.logout_rounded,
                 'Log Out',
@@ -248,37 +225,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildProfileSidebarTile() {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          radius: 16,
+          backgroundColor: AppColors.primaryDark,
+          backgroundImage: AvatarUtil.getAvatarProvider(email),
+        ),
+        title: const Text(
+          'Profile',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        onTap: () => context.push('/profile'),
+      ),
+    );
+  }
+
   Widget _buildBottomNav() {
+    final email = FirebaseAuth.instance.currentUser?.email;
     return NavigationBar(
-      selectedIndex: _selectedIndex == 4 ? 4 : 0,
+      backgroundColor: AppColors.surfaceDark,
+      indicatorColor: AppColors.primaryDark.withValues(alpha: 0.2),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      selectedIndex: _selectedIndex == 4 ? 2 : 0,
       onDestinationSelected: (index) {
         if (index == 0) setState(() => _selectedIndex = 0);
         if (index == 1) context.push('/chat');
-        if (index == 2) context.push('/calls');
-        if (index == 3) context.push('/stories');
-        if (index == 4) setState(() => _selectedIndex = 4);
+        if (index == 2) setState(() => _selectedIndex = 4);
+        if (index == 3) context.push('/profile');
       },
-      destinations: const [
-        NavigationDestination(
+      destinations: [
+        const NavigationDestination(
             icon: Icon(Icons.space_dashboard_outlined),
             selectedIcon: Icon(Icons.space_dashboard),
-            label: 'Home'),
-        NavigationDestination(
+            label: 'Dashboard'),
+        const NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chat'),
-        NavigationDestination(
-            icon: Icon(Icons.call_outlined),
-            selectedIcon: Icon(Icons.call),
-            label: 'Calls'),
-        NavigationDestination(
-            icon: Icon(Icons.auto_stories_outlined),
-            selectedIcon: Icon(Icons.auto_stories),
-            label: 'Stories'),
-        NavigationDestination(
+        const NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Settings'),
+        NavigationDestination(
+          icon: CircleAvatar(
+            radius: 12,
+            backgroundColor: AppColors.primaryDark,
+            backgroundImage: AvatarUtil.getAvatarProvider(email),
+          ),
+          selectedIcon: CircleAvatar(
+            radius: 12,
+            backgroundColor: AppColors.primaryGlow,
+            backgroundImage: AvatarUtil.getAvatarProvider(email),
+          ),
+          label: 'Profile',
+        ),
       ],
     );
   }
@@ -516,6 +521,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       'Help & Support',
                       'Troubleshooting and contact options',
                       () {}),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _buildSettingsGroup(
+                'SESSION',
+                [
+                  _buildSettingsTile(
+                    Icons.logout_rounded,
+                    'Log Out',
+                    'Sign out of this account',
+                    () {
+                      ref.read(authControllerProvider.notifier).logout();
+                      context.go('/login');
+                    },
+                  ),
                 ],
               ),
             ],
