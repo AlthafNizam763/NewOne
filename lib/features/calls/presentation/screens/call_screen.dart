@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 
 class CallScreen extends StatefulWidget {
@@ -55,7 +55,7 @@ class _CallScreenState extends State<CallScreen> {
                 padding: const EdgeInsets.only(top: 20.0),
                 child: const Column(
                   children: [
-                    Text('Elon Musk',
+                    Text('Partner',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 24,
@@ -77,8 +77,10 @@ class _CallScreenState extends State<CallScreen> {
               width: 120,
               height: 160,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                borderRadius: BorderRadius.circular(AppBrutal.radius),
+                border: Border.all(
+                    color: AppColors.borderStrong, width: AppBrutal.border),
+                boxShadow: AppBrutal.hardShadow(),
                 image: const DecorationImage(
                   image: NetworkImage('https://i.pravatar.cc/300'),
                   fit: BoxFit.cover,
@@ -87,54 +89,45 @@ class _CallScreenState extends State<CallScreen> {
             ).animate().scale(delay: 300.ms),
           ),
 
-          // Floating Glassmorphic Call Controls
+          // Floating Call Controls
           Positioned(
             bottom: 40,
             left: 20,
             right: 20,
-            child: GlassmorphicContainer(
-              width: double.infinity,
-              height: 80,
-              borderRadius: 40,
-              blur: 20,
-              alignment: Alignment.center,
-              border: 1.5,
-              linearGradient: LinearGradient(
-                colors: [
-                  Colors.white.withValues(alpha: 0.2),
-                  Colors.white.withValues(alpha: 0.05)
-                ],
-              ),
-              borderGradient: LinearGradient(
-                colors: [
-                  Colors.white.withValues(alpha: 0.5),
-                  Colors.white.withValues(alpha: 0.1)
-                ],
+            child: Container(
+              height: 84,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceDark.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(AppBrutal.radius),
+                border: Border.all(
+                    color: AppColors.borderStrong, width: AppBrutal.border),
+                boxShadow: AppBrutal.hardShadow(),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildControlButton(
                     icon: isMuted ? Icons.mic_off : Icons.mic,
-                    color: isMuted ? Colors.white : Colors.black,
-                    bgColor: isMuted
-                        ? Colors.white.withValues(alpha: 0.2)
-                        : Colors.white,
+                    color: isMuted ? AppColors.textPrimary : AppColors.textDark,
+                    bgColor:
+                        isMuted ? AppColors.elevatedDark : AppColors.primaryDark,
                     onTap: () => setState(() => isMuted = !isMuted),
                   ),
                   _buildControlButton(
                     icon: Icons.call_end,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     bgColor: AppColors.error,
                     size: 60,
                     onTap: () => Navigator.of(context).pop(),
                   ),
                   _buildControlButton(
                     icon: isVideoEnabled ? Icons.videocam : Icons.videocam_off,
-                    color: isVideoEnabled ? Colors.black : Colors.white,
+                    color: isVideoEnabled
+                        ? AppColors.textDark
+                        : AppColors.textPrimary,
                     bgColor: isVideoEnabled
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.2),
+                        ? AppColors.primaryDark
+                        : AppColors.elevatedDark,
                     onTap: () =>
                         setState(() => isVideoEnabled = !isVideoEnabled),
                   ),
@@ -162,6 +155,8 @@ class _CallScreenState extends State<CallScreen> {
         decoration: BoxDecoration(
           color: bgColor,
           shape: BoxShape.circle,
+          border: Border.all(
+              color: AppColors.borderStrong, width: AppBrutal.border),
         ),
         child: Icon(icon, color: color, size: size * 0.5),
       ),

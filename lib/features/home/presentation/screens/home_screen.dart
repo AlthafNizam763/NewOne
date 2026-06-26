@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/avatar_util.dart';
 import '../../../../core/widgets/app_chrome.dart';
@@ -154,10 +156,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildSidebar() {
     return Container(
-      width: 264,
+      width: 268,
       decoration: const BoxDecoration(
         color: AppColors.surfaceDark,
-        border: Border(right: BorderSide(color: AppColors.outlineDark)),
+        border: Border(
+            right: BorderSide(color: AppColors.borderStrong, width: 2)),
       ),
       child: SafeArea(
         child: Padding(
@@ -165,13 +168,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  AppLogoMark(size: 42),
-                  SizedBox(width: 12),
-                  Text('Hisoka',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                  const AppLogoMark(size: 42),
+                  const SizedBox(width: 12),
+                  Text('HISOKA',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2)),
                 ],
               ),
               const SizedBox(height: 36),
@@ -202,24 +207,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildSidebarItem(IconData icon, String title, int index,
       {Color? color, VoidCallback? onTap}) {
     final isSelected = _selectedIndex == index;
-    final itemColor =
-        color ?? (isSelected ? AppColors.primaryGlow : AppColors.textSecondary);
+    final itemColor = color ??
+        (isSelected ? AppColors.textDark : AppColors.textSecondary);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: Icon(icon, color: itemColor),
         title: Text(
           title,
           style: TextStyle(
               color: color ??
-                  (isSelected ? Colors.white : AppColors.textSecondary),
+                  (isSelected ? AppColors.textDark : AppColors.textSecondary),
               fontWeight: FontWeight.w800),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        tileColor: isSelected
-            ? AppColors.primaryDark.withValues(alpha: 0.12)
-            : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppBrutal.radius),
+          side: isSelected
+              ? const BorderSide(color: AppColors.borderStrong, width: 2)
+              : BorderSide.none,
+        ),
+        tileColor: isSelected ? AppColors.primaryDark : Colors.transparent,
         onTap: onTap ?? () => setState(() => _selectedIndex = index),
       ),
     );
@@ -239,7 +247,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           'Profile',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppBrutal.radius)),
         onTap: () => context.push('/profile'),
       ),
     );
@@ -354,10 +363,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   style: TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 18),
-                ElevatedButton.icon(
+                BrutalButton(
+                  label: 'OPEN CHAT',
+                  icon: Icons.chat_bubble_rounded,
+                  expand: false,
                   onPressed: () => context.push('/chat'),
-                  icon: const Icon(Icons.chat_bubble_rounded),
-                  label: const Text('Open Chat'),
                 ),
               ],
             ),
@@ -367,13 +377,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             width: 86,
             height: 86,
             decoration: BoxDecoration(
-              color: AppColors.primaryDark.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.secondaryDark,
+              borderRadius: BorderRadius.circular(AppBrutal.radius),
               border: Border.all(
-                  color: AppColors.primaryDark.withValues(alpha: 0.24)),
+                  color: AppColors.borderStrong, width: AppBrutal.border),
+              boxShadow: AppBrutal.hardShadow(AppColors.primaryDark),
             ),
             child: const Icon(Icons.favorite_rounded,
-                color: AppColors.secondaryDark, size: 42),
+                color: AppColors.textDark, size: 42),
           ),
         ],
       ),

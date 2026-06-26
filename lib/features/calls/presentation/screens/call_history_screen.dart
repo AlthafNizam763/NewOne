@@ -59,7 +59,7 @@ class _CallTile extends StatelessWidget {
         backgroundColor: AppColors.primaryDark,
         child: Text('${index + 1}',
             style: const TextStyle(
-                color: Color(0xFF06211D), fontWeight: FontWeight.w900)),
+                color: AppColors.textDark, fontWeight: FontWeight.w900)),
       ),
       title: Text('Partner ${index + 1}',
           style: const TextStyle(fontWeight: FontWeight.w800)),

@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/avatar_util.dart';
 import '../../../../core/widgets/app_chrome.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -29,11 +31,20 @@ class ProfileScreen extends ConsumerWidget {
                   AppSurface(
                     child: Column(
                       children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: AppColors.primaryDark,
-                          backgroundImage:
-                              AvatarUtil.getAvatarProvider(userEmail),
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: AppColors.borderStrong,
+                                width: AppBrutal.border),
+                            boxShadow: AppBrutal.hardShadow(),
+                          ),
+                          child: CircleAvatar(
+                            radius: 50,
+                            backgroundColor: AppColors.primaryDark,
+                            backgroundImage:
+                                AvatarUtil.getAvatarProvider(userEmail),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -58,35 +69,38 @@ class ProfileScreen extends ConsumerWidget {
                     icon: Icons.person_outline,
                     title: 'Change Nickname',
                     subtitle: 'Update your display name',
-                    onTap: () {},
+                    onTap: () => _notifyComingSoon(context, 'Nickname editing'),
                   ),
                   _buildSettingsTile(
                     icon: Icons.info_outline,
                     title: 'Change About',
                     subtitle: 'Write a short bio',
-                    onTap: () {},
+                    onTap: () => _notifyComingSoon(context, 'Bio editing'),
                   ),
                   _buildSettingsTile(
                     icon: Icons.camera_alt_outlined,
                     title: 'Change Profile Picture',
                     subtitle: 'Upload a new avatar',
-                    onTap: () {},
+                    onTap: () => _notifyComingSoon(context, 'Avatar upload'),
                   ),
                   _buildSettingsTile(
                     icon: Icons.link,
                     title: 'Add Link',
                     subtitle: 'Share your social profiles',
-                    onTap: () {},
+                    onTap: () => _notifyComingSoon(context, 'Social links'),
                   ),
                   _buildSettingsTile(
                     icon: Icons.storage_outlined,
                     title: 'Storage & Data',
                     subtitle: 'Network usage and auto-download',
-                    onTap: () {},
+                    onTap: () => _notifyComingSoon(context, 'Storage & data'),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    onPressed: () => context.go('/login'),
+                    onPressed: () {
+                      ref.read(authControllerProvider.notifier).logout();
+                      context.go('/login');
+                    },
                     icon: const Icon(Icons.logout, color: AppColors.error),
                     label: const Text('Log Out',
                         style: TextStyle(color: AppColors.error)),
@@ -98,6 +112,11 @@ class ProfileScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _notifyComingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$feature is coming soon')));
   }
 
   Widget _buildSettingsTile({
@@ -115,8 +134,9 @@ class ProfileScreen extends ConsumerWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColors.primaryDark.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.elevatedDark,
+              borderRadius: BorderRadius.circular(AppBrutal.radius),
+              border: Border.all(color: AppColors.outlineDark, width: 1.5),
             ),
             child: Icon(icon, color: AppColors.primaryGlow),
           ),

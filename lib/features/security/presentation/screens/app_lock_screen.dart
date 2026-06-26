@@ -28,7 +28,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
     try {
       setState(() => _isAuthenticating = true);
       authenticated = await auth.authenticate(
-        localizedReason: 'Unlock Anata no tame ni to view your messages',
+        localizedReason: 'Unlock Hisoka to view your messages',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,
@@ -80,10 +80,11 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     if (_isAuthenticating)
                       const CircularProgressIndicator()
                     else
-                      ElevatedButton.icon(
+                      BrutalButton(
+                        label: 'UNLOCK',
+                        icon: Icons.fingerprint_rounded,
+                        expand: false,
                         onPressed: _authenticate,
-                        icon: const Icon(Icons.fingerprint_rounded),
-                        label: const Text('Unlock'),
                       ).animate().fade(delay: 300.ms).scale(),
                   ],
                 ),

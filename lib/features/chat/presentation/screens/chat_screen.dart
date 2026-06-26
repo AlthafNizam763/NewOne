@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/avatar_util.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -61,7 +62,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isTyping = false;
   bool _showEmoji = false;
   bool _isUploading = false;
-  bool _isViewOnce = false;
   Map<String, dynamic>? _replyMessage;
 
   bool _notifyWhenOnline = false;
@@ -97,6 +97,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               .collection('users')
               .doc(partnerUid)
               .get();
+          if (!mounted) return;
 
           setState(() {
             _partnerUid = partnerUid;
@@ -177,7 +178,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_msgCtrl.text.trim().isEmpty ||
         _roomId == null ||
         _myUid == null ||
-        _partnerUid == null) return;
+        _partnerUid == null) {
+      return;
+    }
 
     final text = _msgCtrl.text.trim();
     _msgCtrl.clear();
@@ -262,6 +265,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       elevation: 0,
       titleSpacing: 0,
       leadingWidth: 75,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(2),
+        child: Container(color: AppColors.borderStrong, height: 2),
+      ),
       leading: InkWell(
         onTap: () => context.pop(),
         borderRadius: BorderRadius.circular(20),
@@ -375,9 +382,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildMessageList() {
-    if (_roomId == null)
+    if (_roomId == null) {
       return const Center(
           child: CircularProgressIndicator(color: AppColors.primaryGlow));
+    }
 
     return ref.watch(chatMessagesProvider(_roomId!)).when(
           data: (snapshot) {
@@ -458,23 +466,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     return Container(
+      alignment: Alignment.center,
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.elevatedDark,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 2,
-              offset: const Offset(0, 1)),
-        ],
+        borderRadius: BorderRadius.circular(AppBrutal.radius),
+        border:
+            Border.all(color: AppColors.borderStrong, width: 1.5),
       ),
       child: Text(dateStr,
           style: const TextStyle(
-              color: AppColors.textSecondary,
+              color: AppColors.textPrimary,
               fontSize: 12,
-              fontWeight: FontWeight.w700)),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6)),
     );
   }
 
@@ -487,6 +493,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : '';
     final seen = data['seen'] ?? false;
     final delivered = data['delivered'] ?? false;
+
+    // Text on "my" bubble sits on the lime fill and needs dark ink; text on
+    // the partner's bubble sits on the dark elevated fill and needs light ink.
+    final bubbleTextColor = isMe ? AppColors.textDark : AppColors.textPrimary;
+    final bubbleMutedColor =
+        isMe ? AppColors.textDark.withValues(alpha: 0.65) : AppColors.textSecondary;
+    final nestedFillColor = isMe
+        ? AppColors.textDark.withValues(alpha: 0.1)
+        : AppColors.backgroundDark.withValues(alpha: 0.4);
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -512,22 +527,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.8),
             margin: EdgeInsets.only(
-              bottom: showTail ? 8 : 2,
+              bottom: showTail ? 10 : 3,
               left: isMe ? 60 : (showTail ? 16 : 24),
               right: isMe ? (showTail ? 16 : 24) : 60,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isMe
-                  ? AppColors.primaryDark.withValues(alpha: 0.92)
-                  : AppColors.elevatedDark,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 1,
-                    offset: const Offset(0, 1)),
-              ],
+              color: isMe ? AppColors.primaryDark : AppColors.elevatedDark,
+              borderRadius: BorderRadius.circular(AppBrutal.radius),
+              border: Border.all(
+                  color: AppColors.borderStrong, width: 1.5),
+              boxShadow: AppBrutal.hardShadow(
+                  isMe ? AppColors.secondaryDark : AppColors.borderStrong,
+                  AppBrutal.shadowOffsetSmall),
             ),
             child: Column(
               crossAxisAlignment:
@@ -538,12 +550,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(8),
+                      color: nestedFillColor,
+                      borderRadius: BorderRadius.circular(AppBrutal.radius),
                       border: Border(
                           left: BorderSide(
-                              color:
-                                  isMe ? Colors.white70 : AppColors.primaryGlow,
+                              color: isMe
+                                  ? AppColors.textDark
+                                  : AppColors.primaryGlow,
                               width: 3)),
                     ),
                     child: Column(
@@ -554,8 +567,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ? 'You'
                               : (_partnerUsername ?? 'Partner'),
                           style: TextStyle(
-                              color:
-                                  isMe ? Colors.white : AppColors.primaryGlow,
+                              color: isMe
+                                  ? AppColors.textDark
+                                  : AppColors.primaryGlow,
                               fontWeight: FontWeight.bold,
                               fontSize: 12),
                         ),
@@ -564,11 +578,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           data['replyMessage']['text'] ?? 'Photo',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: isMe
-                                  ? Colors.white70
-                                  : AppColors.textSecondary,
-                              fontSize: 12),
+                          style: TextStyle(color: bubbleMutedColor, fontSize: 12),
                         ),
                       ],
                     ),
@@ -578,22 +588,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     margin: const EdgeInsets.only(bottom: 8.0),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(8),
+                      color: nestedFillColor,
+                      borderRadius: BorderRadius.circular(AppBrutal.radius),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.insert_drive_file,
-                            color: AppColors.primaryGlow, size: 30),
+                        Icon(Icons.insert_drive_file,
+                            color: bubbleTextColor, size: 30),
                         const SizedBox(width: 12),
                         Flexible(
                           child: Text(
                             text.replaceFirst('Document: ', ''),
                             style: TextStyle(
-                                color: isMe
-                                    ? const Color(0xFF06211D)
-                                    : Colors.white,
+                                color: bubbleTextColor,
                                 decoration: TextDecoration.underline),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -607,22 +615,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     margin: const EdgeInsets.only(bottom: 8.0),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(8),
+                      color: nestedFillColor,
+                      borderRadius: BorderRadius.circular(AppBrutal.radius),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.location_on,
-                            color: AppColors.success, size: 30),
+                        Icon(Icons.location_on,
+                            color: bubbleTextColor, size: 30),
                         const SizedBox(width: 12),
                         Flexible(
                           child: Text(
                             text.split('\n').first,
                             style: TextStyle(
-                                color: isMe
-                                    ? const Color(0xFF06211D)
-                                    : Colors.white,
+                                color: bubbleTextColor,
                                 fontWeight: FontWeight.bold),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -632,7 +638,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                 if (data['type'] == 'audio' && data['mediaUrl'] != null)
-                  _AudioPlayerBubble(url: data['mediaUrl']),
+                  _AudioPlayerBubble(
+                    url: data['mediaUrl'],
+                    foreground: bubbleTextColor,
+                    muted: bubbleMutedColor,
+                  ),
                 if (data['type'] == 'image')
                   if (data['isViewOnce'] == true)
                     _buildViewOnceMedia(data, isMe, msgId)
@@ -640,7 +650,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppBrutal.radius),
                         child: Image.network(data['mediaUrl'],
                             height: 200, width: 200, fit: BoxFit.cover),
                       ),
@@ -654,11 +664,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: Text(
                         text,
                         style: TextStyle(
-                          color: isMe
-                              ? const Color(0xFF06211D)
-                              : (isDeleted
-                                  ? Colors.white54
-                                  : const Color(0xFFE9EDEF)),
+                          color: isDeleted ? bubbleMutedColor : bubbleTextColor,
                           fontSize: 16,
                           fontStyle:
                               isDeleted ? FontStyle.italic : FontStyle.normal,
@@ -669,11 +675,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(time,
-                            style: TextStyle(
-                                color: isMe
-                                    ? const Color(0xFF17433D)
-                                    : AppColors.textSecondary,
-                                fontSize: 11)),
+                            style:
+                                TextStyle(color: bubbleMutedColor, fontSize: 11)),
                         if (isMe) ...[
                           const SizedBox(width: 4),
                           Icon(
@@ -683,9 +686,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             size: 16,
                             color: seen
                                 ? AppColors.secondaryDark
-                                : (isMe
-                                    ? const Color(0xFF17433D)
-                                    : AppColors.textSecondary),
+                                : bubbleMutedColor,
                           ),
                         ]
                       ],
@@ -705,7 +706,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         context: context,
         backgroundColor: AppColors.surfaceDark,
         shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppBrutal.radius)),
+          side: BorderSide(color: AppColors.borderStrong, width: 2),
+        ),
         builder: (context) {
           return SafeArea(
             child: Column(
@@ -807,10 +811,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: IconButton(
                     icon: Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                          color: Colors.black54, shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                          color: AppColors.backgroundDark.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: AppColors.borderStrong, width: 1.5)),
                       child: const Icon(Icons.close,
-                          color: Colors.white, size: 24),
+                          color: AppColors.textPrimary, size: 24),
                     ),
                     onPressed: () => Navigator.pop(context),
                   ),
@@ -828,12 +835,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.backgroundDark.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(AppBrutal.radius),
           border: Border.all(
-              color: opened
-                  ? AppColors.textSecondary
-                  : AppColors.primaryGlow.withValues(alpha: 0.5)),
+              color: opened ? AppColors.textSecondary : AppColors.primaryGlow,
+              width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -870,9 +876,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
                 color: AppColors.elevatedDark,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppBrutal.radius),
                 border: const Border(
-                    left: BorderSide(color: AppColors.primaryDark, width: 4)),
+                  top: BorderSide(color: AppColors.borderStrong, width: 1.5),
+                  right: BorderSide(color: AppColors.borderStrong, width: 1.5),
+                  bottom:
+                      BorderSide(color: AppColors.borderStrong, width: 1.5),
+                  left: BorderSide(color: AppColors.primaryDark, width: 4),
+                ),
               ),
               child: Row(
                 children: [
@@ -915,8 +926,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.elevatedDark,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.outlineDark),
+                    borderRadius: BorderRadius.circular(AppBrutal.radius),
+                    border: Border.all(
+                        color: AppColors.borderStrong, width: 1.5),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -942,7 +954,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           onChanged: _onTextChanged,
                           onTap: () => setState(() => _showEmoji = false),
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 16),
+                              color: AppColors.textPrimary, fontSize: 16),
                           minLines: 1,
                           maxLines: 6,
                           textCapitalization: TextCapitalization.sentences,
@@ -993,9 +1005,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Container(
                   height: 48,
                   width: 48,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryDark,
-                    borderRadius: BorderRadius.all(Radius.circular(8)),
+                  decoration: BoxDecoration(
+                    color: _isRecording
+                        ? AppColors.secondaryDark
+                        : AppColors.primaryDark,
+                    borderRadius:
+                        BorderRadius.circular(AppBrutal.radius),
+                    border: Border.all(
+                        color: AppColors.borderStrong, width: AppBrutal.border),
+                    boxShadow: AppBrutal.hardShadow(
+                        AppColors.borderStrong, AppBrutal.shadowOffsetSmall),
                   ),
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _msgCtrl,
@@ -1020,7 +1039,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 : (_isRecording
                                     ? Icons.stop_circle
                                     : Icons.mic),
-                            color: Color(0xFF06211D),
+                            color: AppColors.textDark,
                             size: _isRecording ? 32 : 24,
                           ),
                         ),
@@ -1045,8 +1064,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.outlineDark),
+          borderRadius: BorderRadius.circular(AppBrutal.radius),
+          border: Border.all(color: AppColors.borderStrong, width: AppBrutal.border),
+          boxShadow: AppBrutal.hardShadow(),
         ),
         child: Wrap(
           alignment: WrapAlignment.center,
@@ -1062,6 +1082,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 () => _pickAndSendImage(ImageSource.camera, popMenu: true)),
             _buildAttachIcon(Icons.image, AppColors.success, 'Gallery',
                 () => _pickAndSendImage(ImageSource.gallery, popMenu: true)),
+            _buildAttachIcon(
+                Icons.flash_on,
+                AppColors.accent,
+                'View once',
+                () => _pickAndSendImage(ImageSource.gallery,
+                    popMenu: true, viewOnce: true)),
             _buildAttachIcon(Icons.headset, AppColors.accent, 'Audio', () {
               context.pop();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1088,26 +1114,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: bgColor,
-            child: Icon(icon, color: Colors.white, size: 28),
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: AppColors.borderStrong, width: AppBrutal.border),
+            ),
+            child: Icon(icon, color: AppColors.textDark, size: 28),
           ),
           const SizedBox(height: 8),
           Text(label,
-              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
         ],
       ),
     );
   }
 
   Future<void> _pickAndSendImage(ImageSource source,
-      {bool popMenu = false}) async {
+      {bool popMenu = false, bool viewOnce = false}) async {
     if (popMenu) context.pop();
     try {
       final picker = ImagePicker();
       final pickedFile =
           await picker.pickImage(source: source, imageQuality: 70);
+      if (!mounted) return;
       if (pickedFile != null &&
           _roomId != null &&
           _myUid != null &&
@@ -1126,11 +1162,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
 
         final url = await refStorage.getDownloadURL();
+        if (!mounted) return;
 
         final replyMap = _replyMessage;
         setState(() {
           _isUploading = false;
-          _isViewOnce = false; // Reset after use
           _replyMessage = null;
         });
 
@@ -1138,18 +1174,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               roomId: _roomId!,
               senderId: _myUid!,
               receiverId: _partnerUid!,
-              text: _isViewOnce ? 'Photo' : 'Image',
+              text: viewOnce ? 'Photo' : 'Image',
               type: 'image',
               mediaUrl: url,
               replyMessage: replyMap,
-              isViewOnce: _isViewOnce,
+              isViewOnce: viewOnce,
             );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isUploading = false);
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 
@@ -1161,6 +1197,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'zip', 'xls', 'csv'],
         withData: kIsWeb,
       );
+      if (!mounted) return;
 
       if (result != null &&
           _roomId != null &&
@@ -1181,6 +1218,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
 
         final url = await refStorage.getDownloadURL();
+        if (!mounted) return;
 
         await ref.read(chatRepositoryProvider).sendMessage(
               roomId: _roomId!,
@@ -1194,10 +1232,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         setState(() => _isUploading = false);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isUploading = false);
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 
@@ -1207,44 +1245,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       setState(() => _isUploading = true);
 
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return;
       if (!serviceEnabled) {
         setState(() => _isUploading = false);
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location services are disabled.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Location services are disabled.')));
         return;
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
+      if (!mounted) return;
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+        if (!mounted) return;
         if (permission == LocationPermission.denied) {
           setState(() => _isUploading = false);
-          if (mounted)
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Location permissions are denied')));
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permissions are denied')));
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         setState(() => _isUploading = false);
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text(
-                  'Location permissions are permanently denied, we cannot request permissions.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Location permissions are permanently denied, we cannot request permissions.')));
         return;
       }
 
       final position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high);
+      if (!mounted) return;
       final url =
           'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}';
 
       final replyMap = _replyMessage;
       setState(() {
         _isUploading = false;
-        _isViewOnce = false;
         _replyMessage = null;
       });
 
@@ -1257,16 +1295,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             replyMessage: replyMap,
           );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isUploading = false);
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to get location: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to get location: $e')));
     }
   }
 
   Future<void> _startRecording() async {
     try {
-      if (await _audioRecorder.hasPermission()) {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!mounted) return;
+      if (hasPermission) {
         final dir = await getTemporaryDirectory();
         final filePath =
             '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -1275,6 +1315,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: filePath,
         );
+        if (!mounted) return;
 
         setState(() {
           _isRecording = true;
@@ -1284,6 +1325,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             const SnackBar(content: Text('Microphone permission denied')));
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error starting recording: $e')));
     }
@@ -1294,6 +1336,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       final path = await _audioRecorder.stop();
+      if (!mounted) return;
       setState(() {
         _isRecording = false;
       });
@@ -1310,6 +1353,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         await refStorage.putFile(file);
 
         final url = await refStorage.getDownloadURL();
+        if (!mounted) return;
 
         final replyMap = _replyMessage;
         setState(() {
@@ -1328,20 +1372,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isRecording = false;
         _isUploading = false;
       });
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed to send audio: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to send audio: $e')));
     }
   }
 }
 
 class _AudioPlayerBubble extends StatefulWidget {
   final String url;
-  const _AudioPlayerBubble({required this.url});
+  final Color foreground;
+  final Color muted;
+
+  const _AudioPlayerBubble({
+    required this.url,
+    required this.foreground,
+    required this.muted,
+  });
 
   @override
   State<_AudioPlayerBubble> createState() => _AudioPlayerBubbleState();
@@ -1350,6 +1401,7 @@ class _AudioPlayerBubble extends StatefulWidget {
 class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
   final AudioPlayer _player = AudioPlayer();
   bool _isPlaying = false;
+  bool _hasStarted = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
@@ -1369,6 +1421,27 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
     _player.onPositionChanged.listen((newPosition) {
       if (mounted) setState(() => _position = newPosition);
     });
+
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _hasStarted = false;
+          _position = Duration.zero;
+        });
+      }
+    });
+  }
+
+  Future<void> _togglePlayback() async {
+    if (_isPlaying) {
+      await _player.pause();
+    } else if (_hasStarted) {
+      await _player.resume();
+    } else {
+      _hasStarted = true;
+      await _player.play(UrlSource(widget.url));
+    }
   }
 
   @override
@@ -1397,22 +1470,18 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.grey[700],
-            child: const Icon(Icons.person, color: Colors.white),
-          ),
-          const SizedBox(width: 8),
           GestureDetector(
-            onTap: () {
-              if (_isPlaying) {
-                _player.pause();
-              } else {
-                _player.play(UrlSource(widget.url));
-              }
-            },
-            child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow,
-                color: const Color(0xFF8696A0), size: 32),
+            onTap: _togglePlayback,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: widget.foreground,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: AppColors.textDark, size: 22),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1423,20 +1492,17 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
                   value: _duration.inSeconds > 0
                       ? _position.inSeconds / _duration.inSeconds
                       : 0.0,
-                  backgroundColor: Colors.white24,
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(Color(0xFF53BDEB)),
+                  backgroundColor: widget.muted.withValues(alpha: 0.3),
+                  valueColor: AlwaysStoppedAnimation<Color>(widget.foreground),
                 ),
                 const SizedBox(height: 4),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(_formatDuration(_position),
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 10)),
+                        style: TextStyle(color: widget.muted, fontSize: 10)),
                     Text(_formatDuration(_duration),
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 10)),
+                        style: TextStyle(color: widget.muted, fontSize: 10)),
                   ],
                 ),
               ],

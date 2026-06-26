@@ -78,8 +78,9 @@ class _NotificationSettingsScreenState
                       onChanged: (value) async {
                         final prefs = await SharedPreferences.getInstance();
                         await prefs.setBool('notifications_enabled', value);
-                        if (mounted)
+                        if (mounted) {
                           setState(() => _notificationsEnabled = value);
+                        }
                       },
                     ),
                   ),

@@ -37,6 +37,11 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     await prefs.setBool(key, value);
   }
 
+  void _notifyComingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$feature is coming soon')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,7 +81,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                           subtitle:
                               const Text('Chats hidden from the main list.'),
                           trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () {},
+                          onTap: () => _notifyComingSoon(context, 'Hidden chats'),
                         ),
                       ],
                     ),
@@ -124,7 +129,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                               style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontWeight: FontWeight.w800)),
-                          onTap: () {},
+                          onTap: () => _notifyComingSoon(context, 'Blocked users'),
                         ),
                       ],
                     ),

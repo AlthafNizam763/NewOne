@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_chrome.dart';
 
@@ -147,9 +148,9 @@ class _StyleSwatch extends StatelessWidget {
       width: 42,
       height: 42,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppBrutal.radius),
         gradient: LinearGradient(colors: colors),
-        border: Border.all(color: AppColors.outlineDark),
+        border: Border.all(color: AppColors.borderStrong, width: AppBrutal.border),
       ),
     );
   }

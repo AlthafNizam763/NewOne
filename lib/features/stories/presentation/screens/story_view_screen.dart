@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../../config/theme.dart';
+import '../../../../core/constants/app_colors.dart';
 
 class StoryViewScreen extends StatefulWidget {
   final String storyId;
@@ -103,7 +105,7 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                             backgroundImage:
                                 NetworkImage('https://i.pravatar.cc/150')),
                         const SizedBox(width: 8),
-                        const Text('Elon Musk',
+                        const Text('Partner',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold)),
@@ -149,8 +151,9 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                         height: 50,
                         decoration: BoxDecoration(
                           border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3)),
-                          borderRadius: BorderRadius.circular(25),
+                              color: AppColors.borderStrong,
+                              width: AppBrutal.border),
+                          borderRadius: BorderRadius.circular(AppBrutal.radius),
                         ),
                         child: const Align(
                           alignment: Alignment.centerLeft,

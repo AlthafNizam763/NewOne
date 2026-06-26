@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_chrome.dart';
 import '../providers/auth_provider.dart';
@@ -133,15 +134,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
+        BrutalButton(
+          label: 'GENERATE ACCOUNTS',
+          icon: Icons.auto_awesome_rounded,
+          loading: authState.isLoading,
           onPressed: authState.isLoading ? null : _handleRegister,
-          icon: authState.isLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.auto_awesome_rounded),
-          label: const Text('Generate Accounts'),
         ),
       ],
     );
@@ -178,9 +175,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _buildCredBox(
             'User 2', _credentials!['user2_name']!, _credentials!['password']!),
         const SizedBox(height: 32),
-        ElevatedButton(
+        BrutalButton(
+          label: 'GO TO LOGIN',
           onPressed: () => context.go('/login'),
-          child: const Text('Go to Login'),
         ),
       ],
     );
@@ -191,8 +188,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.elevatedDark,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.outlineDark),
+        borderRadius: BorderRadius.circular(AppBrutal.radius),
+        border: Border.all(color: AppColors.borderStrong, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

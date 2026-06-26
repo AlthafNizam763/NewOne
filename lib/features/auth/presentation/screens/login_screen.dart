@@ -120,16 +120,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
+                    BrutalButton(
+                      label: 'LOG IN',
+                      icon: Icons.login_rounded,
+                      loading: authState.isLoading,
                       onPressed: authState.isLoading ? null : _handleLogin,
-                      icon: authState.isLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.login_rounded),
-                      label: const Text('Log In'),
                     ),
                     const SizedBox(height: 18),
                     Row(

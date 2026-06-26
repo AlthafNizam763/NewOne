@@ -52,10 +52,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   .scale(delay: 120.ms),
               const SizedBox(height: 24),
               Text(
-                'Hisoka',
+                'HISOKA',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
                     ),
               ).animate().fade(delay: 250.ms).slideY(begin: 0.2, end: 0),
               const SizedBox(height: 8),
