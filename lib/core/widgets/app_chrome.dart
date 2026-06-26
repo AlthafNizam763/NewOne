@@ -1,9 +1,14 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../config/theme.dart';
 import '../constants/app_colors.dart';
 
+/// Soft gradient backdrop with a couple of blurred colour "blobs" — the
+/// premium glass look reads best when there's something diffuse behind the
+/// frosted panels, not a flat fill.
 class AppBackground extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -16,21 +21,51 @@ class AppBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      decoration:
-          const BoxDecoration(gradient: AppColors.darkBackgroundGradient),
-      child: SafeArea(
-        child: Padding(
-          padding: padding ?? EdgeInsets.zero,
-          child: child,
-        ),
+      decoration: BoxDecoration(
+        gradient: isDark
+            ? AppColors.darkBackgroundGradient
+            : AppColors.lightBackgroundGradient,
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -80,
+            right: -60,
+            child: _glowBlob(AppColors.primaryDark.withValues(alpha: isDark ? 0.28 : 0.18)),
+          ),
+          Positioned(
+            bottom: -100,
+            left: -80,
+            child: _glowBlob(AppColors.secondaryDark.withValues(alpha: isDark ? 0.22 : 0.14)),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: padding ?? EdgeInsets.zero,
+              child: child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _glowBlob(Color color) {
+    return AppGlass.blur(
+      radius: 200,
+      sigma: 80,
+      child: Container(
+        width: 260,
+        height: 260,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       ),
     );
   }
 }
 
-/// A hard-edged, high-contrast card: thick "paper" border plus a flat,
-/// unblurred offset shadow — the core neo-brutalist surface used everywhere.
+/// Frosted-glass card: blurred backdrop, translucent tint, thin soft edge,
+/// and a diffuse drop shadow. The core building block reused everywhere.
 class AppSurface extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -44,29 +79,40 @@ class AppSurface extends StatelessWidget {
     this.padding = const EdgeInsets.all(20),
     this.color,
     this.shadowColor,
-    this.radius = AppBrutal.radius,
+    this.radius = AppGlass.radius,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tint = color ??
+        (isDark ? AppColors.backgroundDarkAlt.withValues(alpha: 0.55) : AppColors.surfaceLight.withValues(alpha: 0.72));
+    final border = isDark ? AppColors.borderStrong : AppColors.borderLight;
+
     return Container(
       decoration: BoxDecoration(
-        color: color ?? AppColors.surfaceDark,
         borderRadius: BorderRadius.circular(radius),
-        border:
-            Border.all(color: AppColors.borderStrong, width: AppBrutal.border),
-        boxShadow: AppBrutal.hardShadow(shadowColor),
+        boxShadow: AppGlass.softShadow(color: shadowColor),
       ),
-      child: Padding(
-        padding: padding,
-        child: child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: AppGlass.blurSigma, sigmaY: AppGlass.blurSigma),
+          child: Container(
+            decoration: BoxDecoration(
+              color: tint,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: border, width: AppGlass.borderWidth),
+            ),
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// Small uppercase eyebrow label with a lime "tick" marker, used above
-/// grouped content (settings groups, dashboard sections, etc).
+/// Small uppercase eyebrow label used above grouped content.
 class SectionLabel extends StatelessWidget {
   final String text;
 
@@ -74,27 +120,17 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            margin: const EdgeInsets.only(right: 8),
-            color: AppColors.primaryDark,
-          ),
-          Text(
-            text.toUpperCase(),
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 12,
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+      child: Text(
+        text.toUpperCase(),
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          color: isDark ? AppColors.primaryGlow : AppColors.primaryLight,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
       ),
     );
   }
@@ -107,26 +143,27 @@ class AppLogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final innerRadius = (AppBrutal.radius - AppBrutal.border).clamp(0, 100);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
-        borderRadius: BorderRadius.circular(AppBrutal.radius),
-        border:
-            Border.all(color: AppColors.borderStrong, width: AppBrutal.border),
-        boxShadow: AppBrutal.hardShadow(),
+        borderRadius: BorderRadius.circular(size * 0.32),
+        boxShadow: AppGlass.softShadow(
+          color: AppColors.primaryDark.withValues(alpha: 0.45),
+          blur: 24,
+          offset: const Offset(0, 10),
+        ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(innerRadius.toDouble()),
+        borderRadius: BorderRadius.circular(size * 0.32),
         child: Image.asset(
           'assets/images/logo.png',
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => Icon(
-            Icons.forum_rounded,
-            color: AppColors.textDark,
-            size: size * 0.5,
+            Icons.chat_bubble_rounded,
+            color: Colors.white,
+            size: size * 0.46,
           ),
         ),
       ),
@@ -161,33 +198,30 @@ class ResponsiveContent extends StatelessWidget {
   }
 }
 
-/// Primary brutalist call-to-action: thick border, flat offset shadow that
-/// compresses on press to mimic the button physically stamping down.
-class BrutalButton extends StatefulWidget {
+/// Primary gradient call-to-action with a gentle press-scale animation.
+class AppButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
-  final Color background;
-  final Color foreground;
+  final Gradient? gradient;
   final bool expand;
   final bool loading;
 
-  const BrutalButton({
+  const AppButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.icon,
-    this.background = AppColors.primaryDark,
-    this.foreground = AppColors.textDark,
+    this.gradient,
     this.expand = true,
     this.loading = false,
   });
 
   @override
-  State<BrutalButton> createState() => _BrutalButtonState();
+  State<AppButton> createState() => _AppButtonState();
 }
 
-class _BrutalButtonState extends State<BrutalButton> {
+class _AppButtonState extends State<AppButton> {
   bool _pressed = false;
 
   void _setPressed(bool value) {
@@ -198,67 +232,58 @@ class _BrutalButtonState extends State<BrutalButton> {
   @override
   Widget build(BuildContext context) {
     final disabled = widget.onPressed == null;
-    final offset = _pressed ? const Offset(2, 2) : AppBrutal.shadowOffset;
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
       onTapUp: (_) => _setPressed(false),
       onTapCancel: () => _setPressed(false),
       onTap: widget.onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 90),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
-        width: widget.expand ? double.infinity : null,
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-        transform: Matrix4.translationValues(
-          _pressed ? AppBrutal.shadowOffset.dx - 2 : 0,
-          _pressed ? AppBrutal.shadowOffset.dy - 2 : 0,
-          0,
-        ),
-        decoration: BoxDecoration(
-          color: disabled ? AppColors.outlineDark : widget.background,
-          borderRadius: BorderRadius.circular(AppBrutal.radius),
-          border: Border.all(
-              color: AppColors.borderStrong, width: AppBrutal.border),
-          boxShadow: disabled
-              ? const []
-              : [
-                  BoxShadow(
-                    color: AppColors.borderStrong,
-                    offset: offset,
-                    blurRadius: 0,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: widget.expand ? double.infinity : null,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          decoration: BoxDecoration(
+            gradient: disabled ? null : (widget.gradient ?? AppColors.primaryGradient),
+            color: disabled ? AppColors.outlineDark : null,
+            borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+            boxShadow: disabled
+                ? const []
+                : AppGlass.softShadow(
+                    color: AppColors.primaryDark.withValues(alpha: 0.35),
+                    blur: 22,
+                    offset: const Offset(0, 8),
                   ),
-                ],
-        ),
-        child: Row(
-          mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (widget.loading) ...[
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: disabled ? AppColors.textSecondary : widget.foreground,
+          ),
+          child: Row(
+            mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.loading) ...[
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+              ] else if (widget.icon != null) ...[
+                Icon(widget.icon,
+                    color: disabled ? AppColors.textSecondary : Colors.white),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                widget.label,
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  color: disabled ? AppColors.textSecondary : Colors.white,
                 ),
               ),
-              const SizedBox(width: 10),
-            ] else if (widget.icon != null) ...[
-              Icon(widget.icon,
-                  color:
-                      disabled ? AppColors.textSecondary : widget.foreground),
-              const SizedBox(width: 10),
             ],
-            Text(
-              widget.label,
-              style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: disabled ? AppColors.textSecondary : widget.foreground,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

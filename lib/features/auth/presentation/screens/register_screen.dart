@@ -101,10 +101,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         const SizedBox(height: 22),
         Text(
           'Create Paired Accounts',
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w900),
+          style: Theme.of(context).textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
@@ -134,8 +131,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        BrutalButton(
-          label: 'GENERATE ACCOUNTS',
+        AppButton(
+          label: 'Generate Accounts',
           icon: Icons.auto_awesome_rounded,
           loading: authState.isLoading,
           onPressed: authState.isLoading ? null : _handleRegister,
@@ -156,10 +153,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         const SizedBox(height: 16),
         Text(
           'Accounts Ready',
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w900),
+          style: Theme.of(context).textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
@@ -175,8 +169,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _buildCredBox(
             'User 2', _credentials!['user2_name']!, _credentials!['password']!),
         const SizedBox(height: 32),
-        BrutalButton(
-          label: 'GO TO LOGIN',
+        AppButton(
+          label: 'Go to Login',
           onPressed: () => context.go('/login'),
         ),
       ],
@@ -188,8 +182,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.elevatedDark,
-        borderRadius: BorderRadius.circular(AppBrutal.radius),
-        border: Border.all(color: AppColors.borderStrong, width: 1.5),
+        borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
+        border: Border.all(color: AppColors.borderStrong),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

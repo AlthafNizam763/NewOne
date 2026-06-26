@@ -37,6 +37,7 @@ class ChatRepositoryImpl implements ChatRepository {
     String? mediaUrl,
     Map<String, dynamic>? replyMessage,
     bool isViewOnce = false,
+    bool isForwarded = false,
   }) async {
     final ref = _firestore
         .collection('chat_rooms')
@@ -58,6 +59,10 @@ class ChatRepositoryImpl implements ChatRepository {
       'delivered': true,
       'createdAt': FieldValue.serverTimestamp(),
       'isDeleted': false,
+      'isEdited': false,
+      'isPinned': false,
+      'isForwarded': isForwarded,
+      'reactions': <String, String>{},
     };
 
     final batch = _firestore.batch();
@@ -147,5 +152,82 @@ class ChatRepositoryImpl implements ChatRepository {
         'deletedBy': FieldValue.arrayUnion(['me']),
       });
     }
+  }
+
+  @override
+  Future<void> toggleReaction(
+      String roomId, String messageId, String uid, String emoji) async {
+    final ref = _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('messages')
+        .doc(messageId);
+
+    final snap = await ref.get();
+    final existing =
+        (snap.data()?['reactions'] as Map<String, dynamic>?) ?? {};
+    final updated = Map<String, dynamic>.from(existing);
+
+    if (updated[uid] == emoji) {
+      updated.remove(uid);
+    } else {
+      updated[uid] = emoji;
+    }
+
+    await ref.update({'reactions': updated});
+  }
+
+  @override
+  Future<void> editMessage(
+      String roomId, String messageId, String newText) async {
+    await _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'text': newText, 'isEdited': true});
+  }
+
+  @override
+  Future<void> togglePinMessage(
+      String roomId, String messageId, bool isPinned) async {
+    final batch = _firestore.batch();
+    final msgRef = _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('messages')
+        .doc(messageId);
+    final roomRef = _firestore.collection('chat_rooms').doc(roomId);
+
+    batch.update(msgRef, {'isPinned': isPinned});
+    batch.set(
+      roomRef,
+      {
+        'pinnedMessageIds': isPinned
+            ? FieldValue.arrayUnion([messageId])
+            : FieldValue.arrayRemove([messageId]),
+      },
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
+  }
+
+  @override
+  Future<void> forwardMessage({
+    required String roomId,
+    required String senderId,
+    required String receiverId,
+    required Map<String, dynamic> data,
+  }) async {
+    await sendMessage(
+      roomId: roomId,
+      senderId: senderId,
+      receiverId: receiverId,
+      text: data['text'] ?? '',
+      type: data['type'] ?? 'text',
+      mediaUrl: data['mediaUrl'],
+      isForwarded: true,
+    );
   }
 }

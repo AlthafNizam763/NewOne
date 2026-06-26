@@ -49,7 +49,7 @@ class StoriesListScreen extends StatelessWidget {
                                       padding: const EdgeInsets.all(3),
                                       decoration: BoxDecoration(
                                         borderRadius:
-                                            BorderRadius.circular(AppBrutal.radius),
+                                            BorderRadius.circular(AppGlass.radius),
                                         gradient: isMyStory
                                             ? null
                                             : AppColors.primaryGradient,
@@ -57,12 +57,11 @@ class StoriesListScreen extends StatelessWidget {
                                             ? AppColors.elevatedDark
                                             : null,
                                         border: Border.all(
-                                            color: AppColors.borderStrong,
-                                            width: AppBrutal.border),
+                                            color: AppColors.borderStrong),
                                       ),
                                       child: ClipRRect(
                                         borderRadius:
-                                            BorderRadius.circular(AppBrutal.radius - 1),
+                                            BorderRadius.circular(AppGlass.radius - 1),
                                         child: Image.asset(
                                           isMyStory
                                               ? 'assets/images/profile_1.jpg'
@@ -127,14 +126,13 @@ class StoriesListScreen extends StatelessWidget {
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                                 borderRadius:
-                                    BorderRadius.circular(AppBrutal.radius),
+                                    BorderRadius.circular(AppGlass.radius),
                                 gradient: AppColors.primaryGradient,
                                 border: Border.all(
-                                    color: AppColors.borderStrong,
-                                    width: AppBrutal.border)),
+                                    color: AppColors.borderStrong)),
                             child: ClipRRect(
                               borderRadius:
-                                  BorderRadius.circular(AppBrutal.radius - 1),
+                                  BorderRadius.circular(AppGlass.radius - 1),
                               child: Image.asset('assets/images/profile_2.jpg',
                                   width: 44, height: 44, fit: BoxFit.cover),
                             ),

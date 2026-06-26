@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -95,6 +95,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
     return Scaffold(
+      extendBody: true,
       body: AppBackground(
         child: Row(
           children: [
@@ -114,7 +115,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: isDesktop ? null : _buildBottomNav(),
+      bottomNavigationBar: isDesktop
+          ? null
+          : SafeArea(
+              minimum: const EdgeInsets.only(bottom: 12),
+              child: _TelegramBottomNav(
+                selectedIndex: _selectedIndex == 4 ? 2 : 0,
+                avatarEmail: FirebaseAuth.instance.currentUser?.email,
+                onTap: (index) {
+                  if (index == 0) setState(() => _selectedIndex = 0);
+                  if (index == 1) context.push('/chat');
+                  if (index == 2) setState(() => _selectedIndex = 4);
+                  if (index == 3) context.push('/profile');
+                },
+              ),
+            ),
     );
   }
 
@@ -129,10 +144,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 Text(
                   _selectedIndex == 4 ? 'Settings' : 'Dashboard',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -155,12 +167,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildSidebar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? AppColors.borderStrong : AppColors.borderLight;
     return Container(
       width: 268,
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceDark,
-        border: Border(
-            right: BorderSide(color: AppColors.borderStrong, width: 2)),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.backgroundDarkAlt.withValues(alpha: 0.5)
+            : AppColors.surfaceLight.withValues(alpha: 0.6),
+        border: Border(right: BorderSide(color: borderColor)),
       ),
       child: SafeArea(
         child: Padding(
@@ -172,11 +187,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   const AppLogoMark(size: 42),
                   const SizedBox(width: 12),
-                  Text('HISOKA',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2)),
+                  Text('Hisoka', style: Theme.of(context).textTheme.titleLarge),
                 ],
               ),
               const SizedBox(height: 36),
@@ -207,25 +218,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildSidebarItem(IconData icon, String title, int index,
       {Color? color, VoidCallback? onTap}) {
     final isSelected = _selectedIndex == index;
-    final itemColor = color ??
-        (isSelected ? AppColors.textDark : AppColors.textSecondary);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 6),
       child: ListTile(
-        leading: Icon(icon, color: itemColor),
+        leading: Icon(icon, color: color ?? (isSelected ? Colors.white : AppColors.textSecondary)),
         title: Text(
           title,
           style: TextStyle(
               color: color ??
-                  (isSelected ? AppColors.textDark : AppColors.textSecondary),
-              fontWeight: FontWeight.w800),
+                  (isSelected ? Colors.white : AppColors.textSecondary),
+              fontWeight: FontWeight.w600),
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppBrutal.radius),
-          side: isSelected
-              ? const BorderSide(color: AppColors.borderStrong, width: 2)
-              : BorderSide.none,
+          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
         ),
         tileColor: isSelected ? AppColors.primaryDark : Colors.transparent,
         onTap: onTap ?? () => setState(() => _selectedIndex = index),
@@ -243,57 +249,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           backgroundColor: AppColors.primaryDark,
           backgroundImage: AvatarUtil.getAvatarProvider(email),
         ),
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+        title: const Text('Profile', style: TextStyle(fontWeight: FontWeight.w600)),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppBrutal.radius)),
+            borderRadius: BorderRadius.circular(AppGlass.radiusPill)),
         onTap: () => context.push('/profile'),
       ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    final email = FirebaseAuth.instance.currentUser?.email;
-    return NavigationBar(
-      backgroundColor: AppColors.surfaceDark,
-      indicatorColor: AppColors.primaryDark.withValues(alpha: 0.2),
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      selectedIndex: _selectedIndex == 4 ? 2 : 0,
-      onDestinationSelected: (index) {
-        if (index == 0) setState(() => _selectedIndex = 0);
-        if (index == 1) context.push('/chat');
-        if (index == 2) setState(() => _selectedIndex = 4);
-        if (index == 3) context.push('/profile');
-      },
-      destinations: [
-        const NavigationDestination(
-            icon: Icon(Icons.space_dashboard_outlined),
-            selectedIcon: Icon(Icons.space_dashboard),
-            label: 'Dashboard'),
-        const NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Chat'),
-        const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings'),
-        NavigationDestination(
-          icon: CircleAvatar(
-            radius: 12,
-            backgroundColor: AppColors.primaryDark,
-            backgroundImage: AvatarUtil.getAvatarProvider(email),
-          ),
-          selectedIcon: CircleAvatar(
-            radius: 12,
-            backgroundColor: AppColors.primaryGlow,
-            backgroundImage: AvatarUtil.getAvatarProvider(email),
-          ),
-          label: 'Profile',
-        ),
-      ],
     );
   }
 
@@ -350,21 +310,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SectionLabel('PRIVATE SPACE'),
-                Text(
-                  'Hello, there.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900),
-                ),
+                Text('Hello, there.', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 8),
                 const Text(
                   'Chat, settings, and privacy controls are ready.',
                   style: TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 18),
-                BrutalButton(
-                  label: 'OPEN CHAT',
+                AppButton(
+                  label: 'Open Chat',
                   icon: Icons.chat_bubble_rounded,
                   expand: false,
                   onPressed: () => context.push('/chat'),
@@ -377,14 +331,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             width: 86,
             height: 86,
             decoration: BoxDecoration(
-              color: AppColors.secondaryDark,
-              borderRadius: BorderRadius.circular(AppBrutal.radius),
-              border: Border.all(
-                  color: AppColors.borderStrong, width: AppBrutal.border),
-              boxShadow: AppBrutal.hardShadow(AppColors.primaryDark),
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(AppGlass.radius),
+              boxShadow: AppGlass.softShadow(
+                  color: AppColors.primaryDark.withValues(alpha: 0.4)),
             ),
             child: const Icon(Icons.favorite_rounded,
-                color: AppColors.textDark, size: 42),
+                color: Colors.white, size: 42),
           ),
         ],
       ),
@@ -465,7 +418,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _partnerUid == null
               ? 'No partner linked'
               : (_isPartnerOnline ? 'Partner is online' : 'Partner is offline'),
-          style: const TextStyle(fontWeight: FontWeight.w900),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
           _partnerUid == null
@@ -515,7 +468,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _buildSettingsTile(
                       Icons.palette_outlined,
                       'Theme & Appearance',
-                      'Color and display preferences',
+                      'Dark mode and display preferences',
                       () => context.push('/theme_settings')),
                   _buildSettingsTile(Icons.language_rounded, 'App Language',
                       'Language preferences', () {}),
@@ -580,7 +533,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       IconData icon, String title, String subtitle, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primaryGlow),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle,
           style: const TextStyle(color: AppColors.textSecondary)),
       trailing: const Icon(Icons.chevron_right_rounded),
@@ -614,18 +567,168 @@ class _MetricContent extends StatelessWidget {
             Text(label,
                 style: const TextStyle(
                     color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w600)),
           ],
         ),
         const SizedBox(height: 12),
-        Text(value,
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w900)),
+        Text(value, style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 4),
         Text(subtitle, style: const TextStyle(color: AppColors.textSecondary)),
       ],
+    );
+  }
+}
+
+/// Floating, frosted-glass bottom navigation with a Telegram-style pill
+/// indicator that glides between destinations.
+class _TelegramBottomNav extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+  final String? avatarEmail;
+
+  const _TelegramBottomNav({
+    required this.selectedIndex,
+    required this.onTap,
+    required this.avatarEmail,
+  });
+
+  static const _items = [
+    (icon: Icons.space_dashboard_rounded, label: 'Dashboard'),
+    (icon: Icons.chat_bubble_rounded, label: 'Chat'),
+    (icon: Icons.settings_rounded, label: 'Settings'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = isDark
+        ? AppColors.backgroundDarkAlt.withValues(alpha: 0.65)
+        : AppColors.surfaceLight.withValues(alpha: 0.75);
+    final border = isDark ? AppColors.borderStrong : AppColors.borderLight;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        height: 68,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+          boxShadow: AppGlass.softShadow(blur: 30, offset: const Offset(0, 14)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: AppGlass.blurSigma, sigmaY: AppGlass.blurSigma),
+            child: Container(
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+                border: Border.all(color: border),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    _NavPill(
+                      icon: _items[i].icon,
+                      label: _items[i].label,
+                      selected: i == selectedIndex,
+                      onTap: () => onTap(i),
+                    ),
+                  _NavAvatarPill(
+                    email: avatarEmail,
+                    selected: selectedIndex == 3,
+                    onTap: () => onTap(3),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _NavPill({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(horizontal: selected ? 16 : 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: selected ? AppColors.primaryGradient : null,
+          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                color: selected ? Colors.white : AppColors.textSecondary, size: 22),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: selected
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(label,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13)),
+                    )
+                  : const SizedBox(width: 0, height: 0),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavAvatarPill extends StatelessWidget {
+  final String? email;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _NavAvatarPill({required this.email, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: selected ? AppColors.primaryGradient : null,
+          border: selected ? null : Border.all(color: AppColors.borderStrong),
+        ),
+        child: CircleAvatar(
+          radius: 15,
+          backgroundColor: AppColors.elevatedDark,
+          backgroundImage: AvatarUtil.getAvatarProvider(email),
+        ),
+      ),
     );
   }
 }

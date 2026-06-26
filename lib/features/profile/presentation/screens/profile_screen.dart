@@ -34,11 +34,11 @@ class ProfileScreen extends ConsumerWidget {
                         Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(
-                                color: AppColors.borderStrong,
-                                width: AppBrutal.border),
-                            boxShadow: AppBrutal.hardShadow(),
+                            gradient: AppColors.primaryGradient,
+                            boxShadow: AppGlass.softShadow(
+                                color: AppColors.primaryDark.withValues(alpha: 0.4)),
                           ),
+                          padding: const EdgeInsets.all(3),
                           child: CircleAvatar(
                             radius: 50,
                             backgroundColor: AppColors.primaryDark,
@@ -49,10 +49,7 @@ class ProfileScreen extends ConsumerWidget {
                         const SizedBox(height: 16),
                         Text(
                           username,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -133,15 +130,14 @@ class ProfileScreen extends ConsumerWidget {
           leading: Container(
             width: 42,
             height: 42,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.elevatedDark,
-              borderRadius: BorderRadius.circular(AppBrutal.radius),
-              border: Border.all(color: AppColors.outlineDark, width: 1.5),
+              shape: BoxShape.circle,
             ),
             child: Icon(icon, color: AppColors.primaryGlow),
           ),
           title:
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(subtitle,
               style: const TextStyle(color: AppColors.textSecondary)),
           trailing: const Icon(Icons.chevron_right_rounded),

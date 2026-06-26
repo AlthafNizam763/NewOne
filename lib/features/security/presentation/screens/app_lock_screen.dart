@@ -65,10 +65,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     const SizedBox(height: 24),
                     Text(
                       'App Locked',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ).animate().fade().slideY(),
                     const SizedBox(height: 8),
                     const Text(
@@ -80,8 +77,8 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     if (_isAuthenticating)
                       const CircularProgressIndicator()
                     else
-                      BrutalButton(
-                        label: 'UNLOCK',
+                      AppButton(
+                        label: 'Unlock',
                         icon: Icons.fingerprint_rounded,
                         expand: false,
                         onPressed: _authenticate,

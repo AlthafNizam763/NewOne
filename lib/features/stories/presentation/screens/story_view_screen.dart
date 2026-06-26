@@ -150,10 +150,10 @@ class _StoryViewScreenState extends State<StoryViewScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         height: 50,
                         decoration: BoxDecoration(
-                          border: Border.all(
-                              color: AppColors.borderStrong,
-                              width: AppBrutal.border),
-                          borderRadius: BorderRadius.circular(AppBrutal.radius),
+                          color: Colors.white.withValues(alpha: 0.08),
+                          border: Border.all(color: AppColors.borderStrong),
+                          borderRadius:
+                              BorderRadius.circular(AppGlass.radiusPill),
                         ),
                         child: const Align(
                           alignment: Alignment.centerLeft,

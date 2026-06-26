@@ -77,10 +77,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 24),
                     Text(
                       'Welcome Back',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
+                      style: Theme.of(context).textTheme.headlineSmall,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
@@ -120,8 +117,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    BrutalButton(
-                      label: 'LOG IN',
+                    AppButton(
+                      label: 'Log In',
                       icon: Icons.login_rounded,
                       loading: authState.isLoading,
                       onPressed: authState.isLoading ? null : _handleLogin,
