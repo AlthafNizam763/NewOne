@@ -283,12 +283,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: ListTile(
         leading: Icon(icon,
             color: color ??
-                (isSelected ? Colors.white : AppColors.textSecondary)),
+                (isSelected
+                    ? Theme.of(context).colorScheme.onPrimary
+                    : AppColors.textSecondary)),
         title: Text(
           title,
           style: TextStyle(
               color: color ??
-                  (isSelected ? Colors.white : AppColors.textSecondary),
+                  (isSelected
+                      ? Theme.of(context).colorScheme.onPrimary
+                      : AppColors.textSecondary),
               fontWeight: FontWeight.w600),
         ),
         shape: RoundedRectangleBorder(
@@ -400,7 +404,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   color: AppColors.primaryDark.withValues(alpha: 0.4)),
             ),
             child:
-                const Icon(Icons.favorite_rounded, color: Colors.white, size: 42),
+                Icon(Icons.favorite_rounded,
+                    color: Theme.of(context).colorScheme.onPrimary, size: 42),
           ),
         ],
       ),
@@ -775,7 +780,9 @@ class _NavPill extends StatelessWidget {
           ),
           child: Icon(
             icon,
-            color: selected ? Colors.white : AppColors.textSecondary,
+            color: selected
+                ? Theme.of(context).colorScheme.onPrimary
+                : AppColors.textSecondary,
             size: 22,
           ),
         ),
@@ -826,7 +833,9 @@ class _NotifyNavButton extends StatelessWidget {
             enabled
                 ? Icons.notifications_active_rounded
                 : Icons.notifications_none_rounded,
-            color: enabled ? Colors.white : AppColors.textSecondary,
+            color: enabled
+                ? Theme.of(context).colorScheme.onPrimary
+                : AppColors.textSecondary,
             size: 21,
           ),
         ),

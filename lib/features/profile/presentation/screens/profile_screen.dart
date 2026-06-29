@@ -247,9 +247,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                             color: AppColors.surfaceDark,
                                             width: 2),
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                           Icons.camera_alt_rounded,
-                                          color: Colors.white,
+                                          color: Theme.of(context).colorScheme.onPrimary,
                                           size: 16),
                                     ),
                                   ],

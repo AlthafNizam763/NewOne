@@ -79,6 +79,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
 
+  // Guards against double-tap on view-once media while Firestore write is in flight
+  final _openingViewOnce = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -339,37 +342,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return AppBar(
       elevation: 0,
       titleSpacing: 0,
-      leadingWidth: 75,
-      leading: InkWell(
-        onTap: () => context.pop(),
-        borderRadius: BorderRadius.circular(AppGlass.radiusPill),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(width: 4),
-            const Icon(Icons.arrow_back, size: 24),
-            const SizedBox(width: 2),
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.elevatedDark,
-              backgroundImage: AvatarUtil.getPartnerAvatarProvider(
-                  FirebaseAuth.instance.currentUser?.email),
-            ),
-          ],
-        ),
+      leadingWidth: 44,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, size: 22),
+        onPressed: () => context.pop(),
+        tooltip: 'Back',
       ),
       title: InkWell(
         onTap: () {},
-        child: Container(
-          padding: const EdgeInsets.only(top: 4, bottom: 4, right: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
             children: [
-              Text(_partnerUsername ?? 'Loading...',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              _buildPartnerStatus(),
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.elevatedDark,
+                backgroundImage: AvatarUtil.getPartnerAvatarProvider(
+                    FirebaseAuth.instance.currentUser?.email),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _partnerUsername ?? 'Loading...',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 1),
+                    _buildPartnerStatus(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -678,29 +686,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         date.day == today.day - 1) {
       dateStr = 'Yesterday';
     } else {
-      dateStr = DateFormat('dd/MM/yyyy').format(date);
+      dateStr = DateFormat('MMMM d, yyyy').format(date);
     }
 
-    return Container(
-      alignment: Alignment.center,
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.elevatedDark.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(AppGlass.radiusPill),
-        border: Border.all(color: AppColors.borderStrong),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppColors.surfaceDark.withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+          boxShadow: const [
+            BoxShadow(color: Color(0x18000000), blurRadius: 4, offset: Offset(0, 1)),
+          ],
+        ),
+        child: Text(dateStr,
+            style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
       ),
-      child: Text(dateStr,
-          style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600)),
     );
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> data, bool isMe, String msgId,
       {bool showTail = true}) {
-    final text = data['text'] ?? '';
+    final text = (data['text'] ?? '') as String;
     final isDeleted = data['isDeleted'] ?? false;
     final isEdited = data['isEdited'] == true;
     final isPinned = data['isPinned'] == true;
@@ -712,6 +726,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final seen = data['seen'] ?? false;
     final delivered = data['delivered'] ?? false;
 
+    // Pure image (no caption) → timestamp overlaid on image instead of below
+    final isImageOnly = data['type'] == 'image' &&
+        data['isViewOnce'] != true &&
+        data['mediaUrl'] != null &&
+        text.isEmpty &&
+        !isDeleted;
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bubbleColor = isMe
         ? (isDark ? AppColors.myBubbleDark : AppColors.myBubbleLight)
@@ -720,8 +741,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final bubbleMutedColor =
         isDark ? AppColors.textSecondary : AppColors.textMutedLight;
     final nestedFillColor = isDark
-        ? Colors.black.withValues(alpha: 0.2)
+        ? Colors.black.withValues(alpha: 0.25)
         : Colors.black.withValues(alpha: 0.06);
+
+    // WA-style: tail on the outward bottom corner; grouped messages are fully rounded
+    const r = Radius.circular(18);
+    const tail = Radius.circular(4);
+    final bubbleRadius = showTail
+        ? (isMe
+            ? const BorderRadius.only(
+                topLeft: r, topRight: r, bottomLeft: r, bottomRight: tail)
+            : const BorderRadius.only(
+                topLeft: r, topRight: r, bottomLeft: tail, bottomRight: r))
+        : BorderRadius.circular(18);
+
+    Widget buildTimestampRow() => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (isPinned)
+              Padding(
+                padding: const EdgeInsets.only(right: 3),
+                child: Icon(Icons.push_pin_rounded,
+                    size: 11, color: bubbleMutedColor),
+              ),
+            if (isEdited && !isDeleted)
+              Padding(
+                padding: const EdgeInsets.only(right: 3),
+                child: Text('edited',
+                    style: TextStyle(color: bubbleMutedColor, fontSize: 10)),
+              ),
+            Text(time, style: TextStyle(color: bubbleMutedColor, fontSize: 11)),
+            if (isMe) ...[
+              const SizedBox(width: 3),
+              Icon(
+                seen
+                    ? Icons.done_all_rounded
+                    : (delivered ? Icons.done_all_rounded : Icons.done_rounded),
+                size: 15,
+                color: seen ? AppColors.primaryGlow : bubbleMutedColor,
+              ),
+            ],
+          ],
+        );
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -747,198 +809,245 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
               child: Container(
                 constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.8),
+                    maxWidth: MediaQuery.of(context).size.width * 0.78),
                 margin: EdgeInsets.only(
-                  bottom: showTail ? 4 : 3,
-                  left: isMe ? 60 : (showTail ? 16 : 24),
-                  right: isMe ? (showTail ? 16 : 24) : 60,
+                  bottom: showTail ? 4 : 2,
+                  top: showTail ? 2 : 1,
+                  left: isMe ? 64 : (showTail ? 12 : 18),
+                  right: isMe ? (showTail ? 12 : 18) : 64,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: bubbleColor,
-                  borderRadius: BorderRadius.circular(AppGlass.radius),
-                  border: Border.all(color: AppColors.borderStrong),
-                  boxShadow: AppGlass.softShadow(
-                      blur: 16, offset: const Offset(0, 6)),
-                ),
-                child: Column(
-                  crossAxisAlignment:
-                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  children: [
-                    if (isForwarded)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.forward_rounded,
-                                size: 14, color: bubbleMutedColor),
-                            const SizedBox(width: 4),
-                            Text('Forwarded',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontStyle: FontStyle.italic,
-                                    color: bubbleMutedColor)),
-                          ],
-                        ),
-                      ),
-                    if (data['replyMessage'] != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: nestedFillColor,
-                          borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
-                          border: const Border(
-                              left: BorderSide(
-                                  color: AppColors.primaryGlow, width: 3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              data['replyMessage']['sender'] == _myUid
-                                  ? 'You'
-                                  : (_partnerUsername ?? 'Partner'),
-                              style: const TextStyle(
-                                  color: AppColors.primaryGlow,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              data['replyMessage']['text'] ?? 'Photo',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: bubbleMutedColor, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (data['type'] == 'document' && data['mediaUrl'] != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: nestedFillColor,
-                          borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.insert_drive_file_rounded,
-                                color: bubbleTextColor, size: 30),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                text.replaceFirst('Document: ', ''),
-                                style: TextStyle(
-                                    color: bubbleTextColor,
-                                    decoration: TextDecoration.underline),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (data['type'] == 'location' && data['text'] != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: nestedFillColor,
-                          borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.location_on_rounded,
-                                color: bubbleTextColor, size: 30),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                text.split('\n').first,
-                                style: TextStyle(
-                                    color: bubbleTextColor,
-                                    fontWeight: FontWeight.bold),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (data['type'] == 'audio' && data['mediaUrl'] != null)
-                      _AudioPlayerBubble(
-                        url: data['mediaUrl'],
-                        foreground: bubbleTextColor,
-                        muted: bubbleMutedColor,
-                      ),
-                    if (data['type'] == 'image')
-                      if (data['isViewOnce'] == true)
-                        _buildViewOnceMedia(data, isMe, msgId)
-                      else if (data['mediaUrl'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
-                            child: Image.network(data['mediaUrl'],
-                                height: 200, width: 200, fit: BoxFit.cover),
-                          ),
-                        ),
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.end,
-                      alignment: WrapAlignment.end,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 12.0, bottom: 0.0),
-                          child: Text(
-                            text,
-                            style: TextStyle(
-                              color: isDeleted ? bubbleMutedColor : bubbleTextColor,
-                              fontSize: 16,
-                              fontStyle:
-                                  isDeleted ? FontStyle.italic : FontStyle.normal,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isPinned)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Icon(Icons.push_pin_rounded,
-                                    size: 12, color: bubbleMutedColor),
-                              ),
-                            if (isEdited && !isDeleted)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Text('edited',
-                                    style: TextStyle(
-                                        color: bubbleMutedColor, fontSize: 11)),
-                              ),
-                            Text(time,
-                                style:
-                                    TextStyle(color: bubbleMutedColor, fontSize: 11)),
-                            if (isMe) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                seen
-                                    ? Icons.done_all_rounded
-                                    : (delivered ? Icons.done_all_rounded : Icons.done_rounded),
-                                size: 16,
-                                color: seen
-                                    ? AppColors.primaryGlow
-                                    : bubbleMutedColor,
-                              ),
-                            ]
-                          ],
-                        )
-                      ],
+                  borderRadius: bubbleRadius,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
                     ),
                   ],
+                ),
+                child: ClipRRect(
+                  borderRadius: bubbleRadius,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Full-width image (bleeds to bubble edges, no side padding)
+                      if (data['type'] == 'image' &&
+                          data['isViewOnce'] != true &&
+                          data['mediaUrl'] != null)
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Image.network(
+                              data['mediaUrl'],
+                              width: double.infinity,
+                              height: 220,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, progress) =>
+                                  progress == null
+                                      ? child
+                                      : Container(
+                                          height: 220,
+                                          color: Colors.black26,
+                                          child: const Center(
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2)),
+                                        ),
+                            ),
+                            // Timestamp overlay only for caption-less images
+                            if (isImageOnly)
+                              Container(
+                                margin: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: buildTimestampRow(),
+                              ),
+                          ],
+                        ),
+                      // Padded content area (text, doc, audio, etc.)
+                      if (!isImageOnly)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            10,
+                            (data['type'] == 'image' &&
+                                    data['mediaUrl'] != null &&
+                                    data['isViewOnce'] != true)
+                                ? 5
+                                : 8,
+                            10,
+                            7,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isForwarded)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.shortcut_rounded,
+                                          size: 13, color: bubbleMutedColor),
+                                      const SizedBox(width: 4),
+                                      Text('Forwarded',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontStyle: FontStyle.italic,
+                                              color: bubbleMutedColor)),
+                                    ],
+                                  ),
+                                ),
+                              if (data['replyMessage'] != null)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(
+                                        alpha: isDark ? 0.25 : 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: const Border(
+                                        left: BorderSide(
+                                            color: AppColors.primaryGlow,
+                                            width: 3)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        data['replyMessage']['sender'] ==
+                                                _myUid
+                                            ? 'You'
+                                            : (_partnerUsername ?? 'Partner'),
+                                        style: const TextStyle(
+                                            color: AppColors.primaryGlow,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        data['replyMessage']['text'] ?? 'Photo',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            color: bubbleMutedColor,
+                                            fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (data['type'] == 'document' &&
+                                  data['mediaUrl'] != null)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                      color: nestedFillColor,
+                                      borderRadius:
+                                          BorderRadius.circular(8)),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.insert_drive_file_rounded,
+                                          color: bubbleTextColor, size: 28),
+                                      const SizedBox(width: 10),
+                                      Flexible(
+                                        child: Text(
+                                          text.replaceFirst('Document: ', ''),
+                                          style: TextStyle(
+                                              color: bubbleTextColor,
+                                              decoration:
+                                                  TextDecoration.underline),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (data['type'] == 'location' &&
+                                  data['text'] != null)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                      color: nestedFillColor,
+                                      borderRadius:
+                                          BorderRadius.circular(8)),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.location_on_rounded,
+                                          color: Color(0xFF4FD1A5), size: 28),
+                                      const SizedBox(width: 10),
+                                      Flexible(
+                                        child: Text(
+                                          text.split('\n').first,
+                                          style: TextStyle(
+                                              color: bubbleTextColor,
+                                              fontWeight: FontWeight.bold),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (data['type'] == 'audio' &&
+                                  data['mediaUrl'] != null)
+                                _AudioPlayerBubble(
+                                  url: data['mediaUrl'],
+                                  foreground: bubbleTextColor,
+                                  muted: bubbleMutedColor,
+                                ),
+                              if (data['type'] == 'image' &&
+                                  data['isViewOnce'] == true)
+                                _buildViewOnceMedia(data, isMe, msgId),
+                              // Text + timestamp row
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.end,
+                                alignment: WrapAlignment.end,
+                                children: [
+                                  if (text.isNotEmpty &&
+                                      data['type'] != 'document' &&
+                                      data['type'] != 'location' &&
+                                      data['isViewOnce'] != true)
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 8),
+                                      child: Text(
+                                        text,
+                                        style: TextStyle(
+                                          color: isDeleted
+                                              ? bubbleMutedColor
+                                              : bubbleTextColor,
+                                          fontSize: 15,
+                                          height: 1.35,
+                                          fontStyle: isDeleted
+                                              ? FontStyle.italic
+                                              : FontStyle.normal,
+                                        ),
+                                      ),
+                                    ),
+                                  buildTimestampRow(),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -946,9 +1055,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (reactions.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(
-                bottom: showTail ? 10 : 3,
-                left: isMe ? 0 : 24,
-                right: isMe ? 24 : 0,
+                bottom: showTail ? 8 : 2,
+                left: isMe ? 0 : 18,
+                right: isMe ? 18 : 0,
               ),
               child: _ReactionChips(
                 reactions: reactions,
@@ -1082,71 +1191,116 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildViewOnceMedia(
       Map<String, dynamic> data, bool isMe, String msgId) {
     final opened = data['viewOnceOpened'] ?? false;
-    final mediaUrl = data['mediaUrl'];
+    final mediaUrl = data['mediaUrl'] as String?;
+
+    // Sender is NEVER allowed to view — only see delivery status.
+    // Recipient can tap once; after that the URL is wiped from Firestore.
+    final canView = !isMe && !opened && mediaUrl != null &&
+        !_openingViewOnce.contains(msgId);
 
     return GestureDetector(
-      onTap: () async {
-        if (opened || mediaUrl == null) return;
+      onTap: canView
+          ? () async {
+              // Lock immediately so a second tap can't race through
+              setState(() => _openingViewOnce.add(msgId));
 
-        await showDialog(
-          context: context,
-          builder: (context) => Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: EdgeInsets.zero,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                InteractiveViewer(
-                  child: Image.network(mediaUrl, fit: BoxFit.contain),
-                ),
-                Positioned(
-                  top: 40,
-                  left: 20,
-                  child: IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: AppColors.backgroundDark.withValues(alpha: 0.7),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.borderStrong)),
-                      child: const Icon(Icons.close,
-                          color: AppColors.textPrimary, size: 24),
-                    ),
-                    onPressed: () => Navigator.pop(context),
+              // Mark opened + wipe mediaUrl in Firestore BEFORE showing image
+              // so a crash or back-press can't let the user view it again
+              await ref
+                  .read(chatRepositoryProvider)
+                  .markViewOnceOpened(_roomId!, msgId);
+
+              if (!mounted) return;
+
+              await showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  insetPadding: EdgeInsets.zero,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      InteractiveViewer(
+                        child: Image.network(mediaUrl, fit: BoxFit.contain),
+                      ),
+                      Positioned(
+                        top: 40,
+                        left: 20,
+                        child: IconButton(
+                          icon: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.backgroundDark.withValues(alpha: 0.7),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.borderStrong),
+                            ),
+                            child: const Icon(Icons.close,
+                                color: AppColors.textPrimary, size: 24),
+                          ),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
+              );
 
-        if (!isMe) {
-          ref.read(chatRepositoryProvider).markViewOnceOpened(_roomId!, msgId);
-        }
-      },
+              if (mounted) setState(() => _openingViewOnce.remove(msgId));
+            }
+          : null,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.backgroundDark.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
           border: Border.all(
-              color: opened ? AppColors.textSecondary : AppColors.primaryGlow),
+            color: canView
+                ? AppColors.primaryGlow
+                : AppColors.textSecondary.withValues(alpha: 0.35),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              opened ? Icons.drafts_outlined : Icons.looks_one_rounded,
-              color: opened ? AppColors.textSecondary : AppColors.primaryGlow,
+              opened
+                  ? Icons.visibility_off_outlined
+                  : (isMe ? Icons.timer_outlined : Icons.looks_one_rounded),
+              color: canView ? AppColors.primaryGlow : AppColors.textSecondary,
             ),
-            const SizedBox(width: 8),
-            Text(
-              opened ? 'Opened' : 'Photo · View once',
-              style: TextStyle(
-                color: opened ? AppColors.textSecondary : AppColors.primaryGlow,
-                fontWeight: FontWeight.bold,
-              ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Photo',
+                  style: TextStyle(
+                    color: opened
+                        ? AppColors.textSecondary
+                        : (canView
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  opened
+                      ? 'Opened'
+                      : (isMe ? 'View once · Sent' : 'Tap to view · Once only'),
+                  style: TextStyle(
+                    color: canView
+                        ? AppColors.primaryGlow
+                        : AppColors.textSecondary.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1155,6 +1309,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildMessageComposer() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // B&W send FAB: white on dark, near-black on light
+    final fabColor = _isRecording
+        ? AppColors.error
+        : (isDark ? Colors.white : const Color(0xFF0A0A0A));
+    final fabIconColor = _isRecording
+        ? Colors.white
+        : (isDark ? Colors.black : Colors.white);
     return Container(
       color: Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)
@@ -1324,13 +1486,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   height: 48,
                   width: 48,
                   decoration: BoxDecoration(
-                    gradient: _isRecording ? null : AppColors.primaryGradient,
-                    color: _isRecording ? AppColors.error : null,
+                    color: fabColor,
                     shape: BoxShape.circle,
-                    boxShadow: AppGlass.softShadow(
-                        color: AppColors.primaryDark.withValues(alpha: 0.35),
-                        blur: 16,
-                        offset: const Offset(0, 6)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: fabColor.withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _msgCtrl,
@@ -1357,7 +1521,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 : (_isRecording
                                     ? Icons.stop_circle_rounded
                                     : Icons.mic_rounded),
-                            color: Colors.white,
+                            color: fabIconColor,
                             size: _isRecording ? 32 : 24,
                           ),
                         ),
@@ -1374,47 +1538,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _showAttachmentMenu() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         margin: const EdgeInsets.only(bottom: 80, left: 12, right: 12),
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
         decoration: BoxDecoration(
-          color: AppColors.surfaceDark,
+          color: isDark ? AppColors.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(AppGlass.radius),
-          border: Border.all(color: AppColors.borderStrong),
           boxShadow: AppGlass.softShadow(),
         ),
-        child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 28,
-          runSpacing: 24,
+        child: GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 20,
+          physics: const NeverScrollableScrollPhysics(),
           children: [
-            _buildAttachIcon(Icons.insert_drive_file_rounded, AppColors.primaryDark,
+            _buildAttachIcon(Icons.insert_drive_file_rounded,
+                isDark ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
                 'Document', _pickAndSendDocument),
             _buildAttachIcon(
                 Icons.camera_alt_rounded,
-                AppColors.secondaryDark,
+                isDark ? const Color(0xFF252525) : const Color(0xFF1A1A1A),
                 'Camera',
                 () => _pickAndSendImage(ImageSource.camera, popMenu: true)),
-            _buildAttachIcon(Icons.image_rounded, AppColors.success, 'Gallery',
+            _buildAttachIcon(
+                Icons.image_rounded,
+                isDark ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
+                'Gallery',
                 () => _pickAndSendImage(ImageSource.gallery, popMenu: true)),
             _buildAttachIcon(
-                Icons.bolt_rounded,
-                AppColors.accent,
+                Icons.timelapse_rounded,
+                isDark ? const Color(0xFF1E1E1E) : const Color(0xFF111111),
                 'View once',
                 () => _pickAndSendImage(ImageSource.gallery,
                     popMenu: true, viewOnce: true)),
-            _buildAttachIcon(Icons.headset_rounded, AppColors.accent, 'Audio', () {
+            _buildAttachIcon(
+                Icons.headset_rounded,
+                isDark ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
+                'Audio', () {
               context.pop();
               ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Audio picker coming soon')));
             }),
-            _buildAttachIcon(Icons.location_on_rounded, AppColors.primaryDark,
+            _buildAttachIcon(
+                Icons.location_on_rounded,
+                isDark ? const Color(0xFF252525) : const Color(0xFF1A1A1A),
                 'Location', _pickAndSendLocation),
-            _buildAttachIcon(Icons.person_rounded, AppColors.primaryDark, 'Contact',
-                () {
+            _buildAttachIcon(
+                Icons.person_rounded,
+                isDark ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
+                'Contact', () {
               context.pop();
               ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Contact sharing coming soon')));
@@ -1432,26 +1609,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       borderRadius: BorderRadius.circular(AppGlass.radiusPill),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
               color: bgColor,
               shape: BoxShape.circle,
-              boxShadow: AppGlass.softShadow(
-                  color: bgColor.withValues(alpha: 0.4),
-                  blur: 14,
-                  offset: const Offset(0, 6)),
+              boxShadow: [
+                BoxShadow(
+                  color: bgColor.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Icon(icon, color: Colors.white, size: 28),
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 7),
           Text(label,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -1823,50 +2005,74 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
 
   @override
   Widget build(BuildContext context) {
+    final progress = _duration.inSeconds > 0
+        ? _position.inSeconds / _duration.inSeconds
+        : 0.0;
+    // Fixed waveform heights for visual variety (simulates real audio waveform)
+    const waveHeights = [
+      5.0, 9.0, 14.0, 7.0, 11.0, 16.0, 9.0, 6.0, 12.0, 14.0,
+      8.0, 5.0, 10.0, 15.0, 7.0, 9.0, 13.0, 6.0, 8.0, 14.0,
+      10.0, 7.0, 11.0, 16.0, 6.0, 9.0, 12.0, 8.0, 10.0, 7.0,
+    ];
+
     return Container(
-      width: 220,
-      margin: const EdgeInsets.only(bottom: 8, top: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      width: 240,
+      margin: const EdgeInsets.only(bottom: 6, top: 2),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
+          // Play/Pause button
           GestureDetector(
             onTap: _togglePlayback,
             child: Container(
-              width: 36,
-              height: 36,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: widget.foreground,
+                color: widget.foreground.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
-              child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: AppColors.textDark, size: 22),
+              child: Icon(
+                _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: widget.foreground,
+                size: 26,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
+          // Waveform + duration
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: _duration.inSeconds > 0
-                        ? _position.inSeconds / _duration.inSeconds
-                        : 0.0,
-                    backgroundColor: widget.muted.withValues(alpha: 0.3),
-                    valueColor: AlwaysStoppedAnimation<Color>(widget.foreground),
+                // Waveform bars
+                SizedBox(
+                  height: 28,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: List.generate(waveHeights.length, (i) {
+                      final isPlayed = i / waveHeights.length < progress;
+                      return Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          height: waveHeights[i],
+                          decoration: BoxDecoration(
+                            color: isPlayed
+                                ? widget.foreground
+                                : widget.muted.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      );
+                    }),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(_formatDuration(_position),
-                        style: TextStyle(color: widget.muted, fontSize: 10)),
-                    Text(_formatDuration(_duration),
-                        style: TextStyle(color: widget.muted, fontSize: 10)),
-                  ],
+                // Duration (shows position when playing, total when stopped)
+                Text(
+                  _isPlaying || _position.inSeconds > 0
+                      ? _formatDuration(_position)
+                      : _formatDuration(_duration),
+                  style: TextStyle(color: widget.muted, fontSize: 11),
                 ),
               ],
             ),

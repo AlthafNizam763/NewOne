@@ -11,7 +11,7 @@ class AppGlass {
   static const double radius = 20.0;
   static const double radiusSmall = 14.0;
   static const double radiusPill = 999.0;
-  static const double blurSigma = 22.0;
+  static const double blurSigma = 24.0;
   static const double borderWidth = 1.0;
 
   static List<BoxShadow> softShadow({
@@ -55,8 +55,12 @@ class AppTheme {
         isDark ? AppColors.textSecondary : AppColors.textMutedLight;
     final outline = isDark ? AppColors.outlineDark : AppColors.outlineLight;
     final glassBorder = isDark ? AppColors.borderStrong : AppColors.borderLight;
-    final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final primary   = isDark ? AppColors.primaryDark  : AppColors.primaryLight;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondaryLight;
+    // Content sitting ON the primary-colored surface must contrast with it.
+    // Dark mode: primary = white  → onPrimary = black.
+    // Light mode: primary = black → onPrimary = white.
+    final onPrimary = isDark ? Colors.black : Colors.white;
 
     final bodyTextTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
       bodyColor: onSurface,
@@ -86,11 +90,11 @@ class AppTheme {
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: primary,
-        onPrimary: Colors.white,
+        onPrimary: onPrimary,
         secondary: secondary,
-        onSecondary: Colors.white,
+        onSecondary: onPrimary,
         tertiary: AppColors.accent,
-        onTertiary: Colors.white,
+        onTertiary: onPrimary,
         surface: surface,
         onSurface: onSurface,
         surfaceContainerHighest: elevated,
@@ -118,7 +122,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: Colors.white,
+          foregroundColor: onPrimary,
           disabledBackgroundColor: outline,
           disabledForegroundColor: onSurfaceMuted,
           elevation: 0,
@@ -206,16 +210,12 @@ class AppTheme {
           (states) => GoogleFonts.inter(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: states.contains(WidgetState.selected)
-                ? Colors.white
-                : onSurfaceMuted,
+            color: states.contains(WidgetState.selected) ? onPrimary : onSurfaceMuted,
           ),
         ),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            color: states.contains(WidgetState.selected)
-                ? Colors.white
-                : onSurfaceMuted,
+            color: states.contains(WidgetState.selected) ? onPrimary : onSurfaceMuted,
           ),
         ),
       ),
@@ -234,7 +234,7 @@ class AppTheme {
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: primary,
-        foregroundColor: Colors.white,
+        foregroundColor: onPrimary,
         elevation: 4,
         shape: const CircleBorder(),
       ),
