@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,10 +20,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../../../core/services/push_notification_service.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
+import '../providers/notify_provider.dart';
+import '../../../calls/presentation/providers/call_provider.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepositoryImpl(FirebaseFirestore.instance);
@@ -72,10 +74,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isSearching = false;
   String _searchQuery = '';
 
-  bool _notifyWhenOnline = false;
-  bool _wasPartnerOnline = false;
   StreamSubscription<User?>? _authSub;
-  StreamSubscription? _partnerSub;
 
   final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
@@ -115,29 +114,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 : '${partnerUid}_$_myUid';
           });
 
-          _partnerSub?.cancel();
-          _partnerSub = FirebaseFirestore.instance
-              .collection('users')
-              .doc(_partnerUid)
-              .snapshots()
-              .listen((snap) {
-            if (!snap.exists) return;
-            final data = snap.data()!;
-            final isOnline = data['isOnline'] == true;
-
-            if (_notifyWhenOnline && !_wasPartnerOnline && isOnline) {
-              ref
-                  .read(pushNotificationServiceProvider)
-                  .showOnlineNotification(data['username'] ?? 'Partner');
-              if (mounted) {
-                setState(() => _notifyWhenOnline = false);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(
-                        '${data['username'] ?? 'Partner'} is now online!')));
-              }
-            }
-            _wasPartnerOnline = isOnline;
-          });
+          // Online notification is handled by HomeScreen via the shared
+          // notifyWhenOnlineProvider so we do not duplicate it here.
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -242,6 +220,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  Future<void> _startCall(String type) async {
+    if (_partnerUid == null) return;
+    final callId = await ref.read(callControllerProvider.notifier).makeCall(
+          calleeId: _partnerUid!,
+          type: type,
+        );
+    if (callId != null && mounted) {
+      context.push('/call/$callId');
+    }
+  }
+
   Future<void> _forwardMessage(Map<String, dynamic> data) async {
     if (_roomId == null || _myUid == null || _partnerUid == null) return;
     final confirmed = await showDialog<bool>(
@@ -282,7 +271,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollCtrl.dispose();
     _typingTimer?.cancel();
     _authSub?.cancel();
-    _partnerSub?.cancel();
     _audioRecorder.dispose();
     if (_roomId != null && _myUid != null) {
       ref
@@ -388,13 +376,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       actions: [
         IconButton(
-            tooltip: 'Video call',
-            icon: const Icon(Icons.videocam_rounded),
-            onPressed: () {}),
+          tooltip: 'Video call',
+          icon: const Icon(Icons.videocam_rounded),
+          onPressed: _partnerUid == null ? null : () => _startCall('video'),
+        ),
         IconButton(
-            tooltip: 'Voice call',
-            icon: const Icon(Icons.call_rounded),
-            onPressed: () {}),
+          tooltip: 'Voice call',
+          icon: const Icon(Icons.call_rounded),
+          onPressed: _partnerUid == null ? null : () => _startCall('audio'),
+        ),
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           onSelected: (val) {
@@ -405,25 +395,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('User blocked')));
             } else if (val == 'notify') {
-              setState(() => _notifyWhenOnline = !_notifyWhenOnline);
+              ref.read(notifyWhenOnlineProvider.notifier).state =
+                  !ref.read(notifyWhenOnlineProvider);
             } else if (val == 'search') {
               setState(() => _isSearching = true);
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-                value: 'view_contact', child: Text('View contact')),
-            const PopupMenuItem(
-                value: 'media', child: Text('Media, links, and docs')),
-            const PopupMenuItem(value: 'search', child: Text('Search')),
-            PopupMenuItem(
-                value: 'notify',
-                child: Text(_notifyWhenOnline
-                    ? 'Disable online alert'
-                    : 'Enable online alert')),
-            const PopupMenuItem(value: 'clear', child: Text('Clear chat')),
-            const PopupMenuItem(value: 'block', child: Text('Block')),
-          ],
+          itemBuilder: (context) {
+            final notifyOn = ref.read(notifyWhenOnlineProvider);
+            return [
+              const PopupMenuItem(
+                  value: 'view_contact', child: Text('View contact')),
+              const PopupMenuItem(
+                  value: 'media', child: Text('Media, links, and docs')),
+              const PopupMenuItem(value: 'search', child: Text('Search')),
+              PopupMenuItem(
+                  value: 'notify',
+                  child: Text(notifyOn
+                      ? 'Disable online alert'
+                      : 'Enable online alert')),
+              const PopupMenuItem(value: 'clear', child: Text('Clear chat')),
+              const PopupMenuItem(value: 'block', child: Text('Block')),
+            ];
+          },
         ),
       ],
     );
@@ -432,34 +426,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildPartnerStatus() {
     if (_partnerUid == null || _roomId == null) return const SizedBox.shrink();
 
+    // Typing check from Firestore room doc
     return ref.watch(roomStreamProvider(_roomId!)).when(
           data: (roomDoc) {
             final roomData = roomDoc.data() as Map<String, dynamic>?;
             final isTyping = roomData?['typing_$_partnerUid'] ?? false;
-
             if (isTyping) {
-              return const Text('typing...',
+              return const Text('typing…',
                   style: TextStyle(
                       fontSize: 13,
                       color: AppColors.primaryGlow,
                       fontWeight: FontWeight.w600));
             }
 
-            return ref.watch(userProfileProvider(_partnerUid!)).when(
-                  data: (userDoc) {
-                    final userData = userDoc.data() as Map<String, dynamic>?;
-                    final isOnline = userData?['isOnline'] ?? false;
-                    if (isOnline) {
-                      return const Text('online',
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.textSecondary));
-                    } else {
-                      return const SizedBox.shrink();
-                    }
-                  },
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                );
+            // Online status from Firebase Realtime Database for accuracy
+            return StreamBuilder<DatabaseEvent>(
+              stream: FirebaseDatabase.instance
+                  .ref('status/$_partnerUid')
+                  .onValue,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox.shrink();
+                final data = snapshot.data!.snapshot.value;
+                final isOnline = data is Map && data['isOnline'] == true;
+                if (!isOnline) return const SizedBox.shrink();
+                return const Text('online',
+                    style: TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary));
+              },
+            );
           },
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),

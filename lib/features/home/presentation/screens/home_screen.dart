@@ -10,9 +10,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/presence_service.dart';
+import '../../../../core/services/push_notification_service.dart';
 import '../../../../core/utils/avatar_util.dart';
 import '../../../../core/widgets/app_chrome.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../calls/presentation/providers/call_provider.dart';
+import '../../../chat/presentation/providers/notify_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -21,7 +25,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
   String? _roomId;
   String? _partnerUid;
@@ -29,18 +34,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoadingRoom = true;
 
   StreamSubscription<User?>? _authSub;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _partnerOnlineSub;
+  StreamSubscription? _partnerOnlineSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null && mounted) {
+        // Initialize presence for the current user
+        ref.read(presenceServiceProvider).initialize(user.uid);
         _fetchRoomData(user.uid);
       } else if (mounted) {
         setState(() => _isLoadingRoom = false);
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // PresenceService already has WidgetsBindingObserver wired to the same
+    // lifecycle, so we do not need to duplicate calls here.
+    super.didChangeAppLifecycleState(state);
   }
 
   Future<void> _fetchRoomData(String uid) async {
@@ -60,14 +75,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return;
       }
 
+      // Watch partner online status from Firebase Realtime Database for
+      // accuracy (RTDB uses server-side onDisconnect, Firestore does not).
       await _partnerOnlineSub?.cancel();
-      _partnerOnlineSub = FirebaseFirestore.instance
-          .collection('users')
-          .doc(partnerUid)
-          .snapshots()
-          .listen((snap) {
-        if (!mounted || !snap.exists) return;
-        setState(() => _isPartnerOnline = snap.data()?['isOnline'] == true);
+      _partnerOnlineSub = ref
+          .read(presenceServiceProvider)
+          .watchPartnerOnline(partnerUid)
+          .listen((isOnline) {
+        if (!mounted) return;
+        final wasOnline = _isPartnerOnline;
+        setState(() => _isPartnerOnline = isOnline);
+
+        // Fire the in-app + push notification if the notify flag is on
+        if (!wasOnline && isOnline && ref.read(notifyWhenOnlineProvider)) {
+          // Read partner name from Firestore for the notification
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(partnerUid)
+              .get()
+              .then((snap) {
+            if (!mounted) return;
+            final username =
+                snap.data()?['username'] as String? ?? 'Partner';
+            ref
+                .read(pushNotificationServiceProvider)
+                .showOnlineNotification(username);
+            // Auto-disable the flag after firing once
+            ref.read(notifyWhenOnlineProvider.notifier).state = false;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('$username is now online!')),
+            );
+          });
+        }
       });
 
       setState(() {
@@ -85,6 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _partnerOnlineSub?.cancel();
     super.dispose();
@@ -93,6 +133,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    // Detect incoming calls and navigate to the call screen
+    ref.listen(incomingCallStreamProvider, (_, next) {
+      next.whenData((callDoc) {
+        if (callDoc == null) return;
+        final data = callDoc.data();
+        if (data == null) return;
+        ref.read(callControllerProvider.notifier).setIncoming(
+              callId: callDoc.id,
+              callerId: data['callerId'] as String? ?? '',
+              callerName: data['callerName'] as String? ?? 'Partner',
+              type: data['type'] as String? ?? 'audio',
+            );
+        context.push('/call/${callDoc.id}');
+      });
+    });
 
     return Scaffold(
       extendBody: true,
@@ -122,12 +178,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: _TelegramBottomNav(
                 selectedIndex: _selectedIndex == 4 ? 2 : 0,
                 avatarEmail: FirebaseAuth.instance.currentUser?.email,
+                notifyEnabled: ref.watch(notifyWhenOnlineProvider),
                 onTap: (index) {
                   if (index == 0) setState(() => _selectedIndex = 0);
                   if (index == 1) context.push('/chat');
                   if (index == 2) setState(() => _selectedIndex = 4);
                   if (index == 3) context.push('/profile');
                 },
+                onNotifyTap: () => ref
+                    .read(notifyWhenOnlineProvider.notifier)
+                    .state = !ref.read(notifyWhenOnlineProvider),
               ),
             ),
     );
@@ -218,11 +278,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildSidebarItem(IconData icon, String title, int index,
       {Color? color, VoidCallback? onTap}) {
     final isSelected = _selectedIndex == index;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: ListTile(
-        leading: Icon(icon, color: color ?? (isSelected ? Colors.white : AppColors.textSecondary)),
+        leading: Icon(icon,
+            color: color ??
+                (isSelected ? Colors.white : AppColors.textSecondary)),
         title: Text(
           title,
           style: TextStyle(
@@ -249,7 +310,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           backgroundColor: AppColors.primaryDark,
           backgroundImage: AvatarUtil.getAvatarProvider(email),
         ),
-        title: const Text('Profile', style: TextStyle(fontWeight: FontWeight.w600)),
+        title:
+            const Text('Profile', style: TextStyle(fontWeight: FontWeight.w600)),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppGlass.radiusPill)),
         onTap: () => context.push('/profile'),
@@ -310,7 +372,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SectionLabel('PRIVATE SPACE'),
-                Text('Hello, there.', style: Theme.of(context).textTheme.headlineSmall),
+                Text('Hello, there.',
+                    style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 8),
                 const Text(
                   'Chat, settings, and privacy controls are ready.',
@@ -336,8 +399,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               boxShadow: AppGlass.softShadow(
                   color: AppColors.primaryDark.withValues(alpha: 0.4)),
             ),
-            child: const Icon(Icons.favorite_rounded,
-                color: Colors.white, size: 42),
+            child:
+                const Icon(Icons.favorite_rounded, color: Colors.white, size: 42),
           ),
         ],
       ),
@@ -542,6 +605,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
+// ── Metric card content ───────────────────────────────────────────────────────
+
 class _MetricContent extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -579,17 +644,24 @@ class _MetricContent extends StatelessWidget {
   }
 }
 
-/// Floating, frosted-glass bottom navigation with a Telegram-style pill
-/// indicator that glides between destinations.
+// ── Bottom navigation ─────────────────────────────────────────────────────────
+
+/// Floating frosted-glass bottom navigation bar.
+/// Contains icons-only nav pills (no text labels) plus a prominent
+/// circular "notify when online" button between Chat and Settings.
 class _TelegramBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
   final String? avatarEmail;
+  final bool notifyEnabled;
+  final VoidCallback onNotifyTap;
 
   const _TelegramBottomNav({
     required this.selectedIndex,
     required this.onTap,
     required this.avatarEmail,
+    required this.notifyEnabled,
+    required this.onNotifyTap,
   });
 
   static const _items = [
@@ -612,12 +684,14 @@ class _TelegramBottomNav extends StatelessWidget {
         height: 68,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppGlass.radiusPill),
-          boxShadow: AppGlass.softShadow(blur: 30, offset: const Offset(0, 14)),
+          boxShadow:
+              AppGlass.softShadow(blur: 30, offset: const Offset(0, 14)),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppGlass.radiusPill),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: AppGlass.blurSigma, sigmaY: AppGlass.blurSigma),
+            filter: ImageFilter.blur(
+                sigmaX: AppGlass.blurSigma, sigmaY: AppGlass.blurSigma),
             child: Container(
               decoration: BoxDecoration(
                 color: fill,
@@ -628,13 +702,33 @@ class _TelegramBottomNav extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  for (var i = 0; i < _items.length; i++)
-                    _NavPill(
-                      icon: _items[i].icon,
-                      label: _items[i].label,
-                      selected: i == selectedIndex,
-                      onTap: () => onTap(i),
-                    ),
+                  // Dashboard
+                  _NavPill(
+                    icon: _items[0].icon,
+                    label: _items[0].label,
+                    selected: selectedIndex == 0,
+                    onTap: () => onTap(0),
+                  ),
+                  // Chat
+                  _NavPill(
+                    icon: _items[1].icon,
+                    label: _items[1].label,
+                    selected: selectedIndex == 1,
+                    onTap: () => onTap(1),
+                  ),
+                  // ── Notify button (centre) ─────────────────────────
+                  _NotifyNavButton(
+                    enabled: notifyEnabled,
+                    onTap: onNotifyTap,
+                  ),
+                  // Settings
+                  _NavPill(
+                    icon: _items[2].icon,
+                    label: _items[2].label,
+                    selected: selectedIndex == 2,
+                    onTap: () => onTap(2),
+                  ),
+                  // Profile avatar
                   _NavAvatarPill(
                     email: avatarEmail,
                     selected: selectedIndex == 3,
@@ -650,9 +744,10 @@ class _TelegramBottomNav extends StatelessWidget {
   }
 }
 
+/// Icon-only nav pill. Text labels have been removed for a cleaner look.
 class _NavPill extends StatelessWidget {
   final IconData icon;
-  final String label;
+  final String label; // kept for tooltip/semantics only
   final bool selected;
   final VoidCallback onTap;
 
@@ -665,37 +760,75 @@ class _NavPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        padding: EdgeInsets.symmetric(horizontal: selected ? 16 : 12, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: selected ? AppColors.primaryGradient : null,
-          borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: selected ? AppColors.primaryGradient : null,
+            borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+          ),
+          child: Icon(
+            icon,
+            color: selected ? Colors.white : AppColors.textSecondary,
+            size: 22,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                color: selected ? Colors.white : AppColors.textSecondary, size: 22),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: selected
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(label,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13)),
-                    )
-                  : const SizedBox(width: 0, height: 0),
+      ),
+    );
+  }
+}
+
+/// Circular "notify me when partner comes online" button.
+/// Appears between Chat and Settings in the bottom nav.
+class _NotifyNavButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _NotifyNavButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: enabled ? 'Disable online alert' : 'Notify when online',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: enabled ? AppColors.primaryGradient : null,
+            color: enabled ? null : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: enabled
+                  ? Colors.transparent
+                  : AppColors.borderStrong,
+              width: 1.5,
             ),
-          ],
+            boxShadow: enabled
+                ? AppGlass.softShadow(
+                    color: AppColors.primaryDark.withValues(alpha: 0.55),
+                    blur: 14,
+                    offset: const Offset(0, 5),
+                  )
+                : null,
+          ),
+          child: Icon(
+            enabled
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_none_rounded,
+            color: enabled ? Colors.white : AppColors.textSecondary,
+            size: 21,
+          ),
         ),
       ),
     );
@@ -707,7 +840,8 @@ class _NavAvatarPill extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _NavAvatarPill({required this.email, required this.selected, required this.onTap});
+  const _NavAvatarPill(
+      {required this.email, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
