@@ -22,12 +22,10 @@ abstract class ChatRepository {
       String roomId, String messageId, String uid, bool isStarred);
   Future<void> markViewOnceOpened(String roomId, String messageId);
   Future<void> setTypingStatus(String roomId, String uid, bool isTyping);
+  Future<void> setRecordingStatus(String roomId, String uid, bool isRecording);
   Future<void> deleteMessage(String roomId, String messageId,
-      {required bool forEveryone});
+      {required bool forEveryone, String uid = ''});
 
-  /// Toggles [emoji] as the caller's reaction on a message. Passing the same
-  /// emoji the user already picked removes it; passing a different emoji
-  /// replaces it (one reaction per user, like Telegram's quick-react).
   Future<void> toggleReaction(
       String roomId, String messageId, String uid, String emoji);
 
@@ -36,11 +34,13 @@ abstract class ChatRepository {
   Future<void> togglePinMessage(
       String roomId, String messageId, bool isPinned);
 
-  /// Re-sends [data] as a new message in [roomId], tagged as forwarded.
   Future<void> forwardMessage({
     required String roomId,
     required String senderId,
     required String receiverId,
     required Map<String, dynamic> data,
   });
+
+  /// Deletes all messages in the room and resets room metadata.
+  Future<void> clearChat(String roomId);
 }

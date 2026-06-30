@@ -177,6 +177,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               minimum: const EdgeInsets.only(bottom: 12),
               child: _TelegramBottomNav(
                 selectedIndex: _selectedIndex == 4 ? 2 : 0,
+                avatarUid: FirebaseAuth.instance.currentUser?.uid,
                 avatarEmail: FirebaseAuth.instance.currentUser?.email,
                 notifyEnabled: ref.watch(notifyWhenOnlineProvider),
                 onTap: (index) {
@@ -305,14 +306,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildProfileSidebarTile() {
-    final email = FirebaseAuth.instance.currentUser?.email;
+    final currentUser = FirebaseAuth.instance.currentUser;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: CircleAvatar(
+        leading: UserAvatar(
+          uid: currentUser?.uid,
+          fallbackEmail: currentUser?.email,
           radius: 16,
-          backgroundColor: AppColors.primaryDark,
-          backgroundImage: AvatarUtil.getAvatarProvider(email),
         ),
         title:
             const Text('Profile', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -454,16 +455,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildPartnerCard() {
-    final email = FirebaseAuth.instance.currentUser?.email;
     return AppSurface(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: Stack(
           children: [
-            CircleAvatar(
+            UserAvatar(
+              uid: _partnerUid,
+              isPartner: true,
               radius: 28,
-              backgroundColor: AppColors.primaryDark,
-              backgroundImage: AvatarUtil.getPartnerAvatarProvider(email),
             ),
             Positioned(
               right: 0,
@@ -657,6 +657,7 @@ class _MetricContent extends StatelessWidget {
 class _TelegramBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final String? avatarUid;
   final String? avatarEmail;
   final bool notifyEnabled;
   final VoidCallback onNotifyTap;
@@ -664,6 +665,7 @@ class _TelegramBottomNav extends StatelessWidget {
   const _TelegramBottomNav({
     required this.selectedIndex,
     required this.onTap,
+    this.avatarUid,
     required this.avatarEmail,
     required this.notifyEnabled,
     required this.onNotifyTap,
@@ -735,6 +737,7 @@ class _TelegramBottomNav extends StatelessWidget {
                   ),
                   // Profile avatar
                   _NavAvatarPill(
+                    uid: avatarUid,
                     email: avatarEmail,
                     selected: selectedIndex == 3,
                     onTap: () => onTap(3),
@@ -845,12 +848,13 @@ class _NotifyNavButton extends StatelessWidget {
 }
 
 class _NavAvatarPill extends StatelessWidget {
+  final String? uid;
   final String? email;
   final bool selected;
   final VoidCallback onTap;
 
   const _NavAvatarPill(
-      {required this.email, required this.selected, required this.onTap});
+      {this.uid, required this.email, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -866,10 +870,10 @@ class _NavAvatarPill extends StatelessWidget {
           gradient: selected ? AppColors.primaryGradient : null,
           border: selected ? null : Border.all(color: AppColors.borderStrong),
         ),
-        child: CircleAvatar(
+        child: UserAvatar(
+          uid: uid,
+          fallbackEmail: email,
           radius: 15,
-          backgroundColor: AppColors.elevatedDark,
-          backgroundImage: AvatarUtil.getAvatarProvider(email),
         ),
       ),
     );

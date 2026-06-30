@@ -93,28 +93,7 @@ class PushNotificationService {
     // 3. Background handler must be registered before requestPermission.
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 4. Request permission — on Android 13+ this triggers POST_NOTIFICATIONS dialog.
-    final permissionSettings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-    debugPrint('[FCM] Permission: ${permissionSettings.authorizationStatus}');
-    if (permissionSettings.authorizationStatus == AuthorizationStatus.denied) {
-      debugPrint('[FCM] Notifications denied — skipping listener setup');
-      return;
-    }
-
-    // 5. iOS foreground presentation (shows banner even when app is open).
-    await _fcm.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // 6. FOREGROUND handler — FCM does NOT auto-show a notification when the app
-    //    is open; we must call _localNotifications.show() ourselves.
+    // 4. Wire foreground listener immediately (before permission, safe to do).
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('[FCM] Foreground message: ${message.messageId} '
           '| title: ${message.notification?.title}');
@@ -130,27 +109,43 @@ class PushNotificationService {
       );
     });
 
-    // 7. BACKGROUND → app opened by tapping notification.
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('[FCM] Opened from background notification: ${message.messageId}');
+      debugPrint('[FCM] Opened from background: ${message.messageId}');
       onNotificationTap?.call(message.data);
     });
 
-    // 8. TERMINATED → app launched by tapping notification.
-    final initialMessage = await _fcm.getInitialMessage();
-    if (initialMessage != null) {
-      debugPrint('[FCM] Launched from terminated-state notification: '
-          '${initialMessage.messageId}');
-      onNotificationTap?.call(initialMessage.data);
-    }
+    // 5. Non-blocking: request permission + finish setup after app starts.
+    //    This avoids blocking the UI thread with the system permission dialog.
+    _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    ).then((settings) async {
+      debugPrint('[FCM] Permission: ${settings.authorizationStatus}');
+      if (settings.authorizationStatus == AuthorizationStatus.denied) return;
 
-    // 9. Get token and persist to Firestore.
-    await _refreshAndSaveToken();
+      await _fcm.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    // 10. Keep token fresh — FCM may rotate it at any time.
-    _fcm.onTokenRefresh.listen((String newToken) {
-      debugPrint('[FCM] Token refreshed');
-      _saveTokenToFirestore(newToken);
+      // Handle terminated-state launch notification.
+      final initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        debugPrint('[FCM] Launched from terminated: ${initialMessage.messageId}');
+        onNotificationTap?.call(initialMessage.data);
+      }
+
+      // Persist token and keep it fresh.
+      await _refreshAndSaveToken();
+      _fcm.onTokenRefresh.listen((String newToken) {
+        debugPrint('[FCM] Token refreshed');
+        _saveTokenToFirestore(newToken);
+      });
+    }).catchError((e) {
+      debugPrint('[FCM] Permission request error: $e');
     });
   }
 

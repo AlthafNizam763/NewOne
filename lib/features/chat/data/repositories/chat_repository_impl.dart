@@ -45,6 +45,23 @@ class ChatRepositoryImpl implements ChatRepository {
         .collection('messages')
         .doc();
 
+    String lastMessagePreview;
+    if (type == 'text') {
+      lastMessagePreview = text.isNotEmpty ? text : '';
+    } else if (type == 'image') {
+      lastMessagePreview = '📷 Photo';
+    } else if (type == 'video') {
+      lastMessagePreview = '🎥 Video';
+    } else if (type == 'audio') {
+      lastMessagePreview = '🎤 Voice message';
+    } else if (type == 'document') {
+      lastMessagePreview = '📄 Document';
+    } else if (type == 'location') {
+      lastMessagePreview = '📍 Location';
+    } else {
+      lastMessagePreview = '[$type]';
+    }
+
     final msg = {
       'id': ref.id,
       'sender': senderId,
@@ -63,23 +80,23 @@ class ChatRepositoryImpl implements ChatRepository {
       'isPinned': false,
       'isForwarded': isForwarded,
       'reactions': <String, String>{},
+      'deletedBy': <String>[],
     };
 
     final batch = _firestore.batch();
     batch.set(ref, msg);
-
     batch.set(
         _firestore.collection('chat_rooms').doc(roomId),
         {
-          'lastMessage': type == 'text' ? text : '[$type]',
+          'lastMessage': lastMessagePreview,
           'lastMessageTime': FieldValue.serverTimestamp(),
           'unreadCount_$receiverId': FieldValue.increment(1),
           'totalMessages': FieldValue.increment(1),
           if (type != 'text') 'totalMedia': FieldValue.increment(1),
-          'typing_$senderId': false, // Stop typing when sending
+          'typing_$senderId': false,
+          'recording_$senderId': false,
         },
         SetOptions(merge: true));
-
     await batch.commit();
   }
 
@@ -121,20 +138,28 @@ class ChatRepositoryImpl implements ChatRepository {
         .doc(messageId)
         .update({
       'viewOnceOpened': true,
-      'mediaUrl': null, // Delete the URL from DB so it cannot be accessed again
+      'mediaUrl': null,
     });
   }
 
   @override
   Future<void> setTypingStatus(String roomId, String uid, bool isTyping) async {
-    await _firestore.collection('chat_rooms').doc(roomId).update({
+    await _firestore.collection('chat_rooms').doc(roomId).set({
       'typing_$uid': isTyping,
-    });
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> setRecordingStatus(
+      String roomId, String uid, bool isRecording) async {
+    await _firestore.collection('chat_rooms').doc(roomId).set({
+      'recording_$uid': isRecording,
+    }, SetOptions(merge: true));
   }
 
   @override
   Future<void> deleteMessage(String roomId, String messageId,
-      {required bool forEveryone}) async {
+      {required bool forEveryone, String uid = ''}) async {
     final ref = _firestore
         .collection('chat_rooms')
         .doc(roomId)
@@ -144,13 +169,16 @@ class ChatRepositoryImpl implements ChatRepository {
       await ref.update({
         'isDeleted': true,
         'text': 'This message was deleted',
-        'type': 'system'
+        'mediaUrl': null,
+        'type': 'system',
       });
     } else {
-      // For me logic could involve hiding it locally or maintaining a deletedBy array
-      await ref.update({
-        'deletedBy': FieldValue.arrayUnion(['me']),
-      });
+      // "Delete for me" — tag with actual uid so receiver still sees it
+      if (uid.isNotEmpty) {
+        await ref.update({
+          'deletedBy': FieldValue.arrayUnion([uid]),
+        });
+      }
     }
   }
 
@@ -229,5 +257,35 @@ class ChatRepositoryImpl implements ChatRepository {
       mediaUrl: data['mediaUrl'],
       isForwarded: true,
     );
+  }
+
+  @override
+  Future<void> clearChat(String roomId) async {
+    // Delete all messages in Firestore batches (max 500 ops per batch)
+    QuerySnapshot snap;
+    do {
+      snap = await _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('messages')
+          .limit(500)
+          .get();
+
+      if (snap.docs.isEmpty) break;
+
+      final writeBatch = _firestore.batch();
+      for (final doc in snap.docs) {
+        writeBatch.delete(doc.reference);
+      }
+      await writeBatch.commit();
+    } while (snap.docs.length == 500);
+
+    // Reset room metadata
+    await _firestore.collection('chat_rooms').doc(roomId).set({
+      'lastMessage': '',
+      'totalMessages': 0,
+      'totalMedia': 0,
+      'pinnedMessageIds': <String>[],
+    }, SetOptions(merge: true));
   }
 }
