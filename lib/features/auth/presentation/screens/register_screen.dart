@@ -16,31 +16,22 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailCtrl = TextEditingController();
-  final _usernameCtrl = TextEditingController();
   Map<String, String>? _credentials;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _usernameCtrl.dispose();
     super.dispose();
   }
 
   void _handleRegister() {
-    if (!_emailCtrl.text.contains('@')) {
+    final email = _emailCtrl.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid email')));
+          const SnackBar(content: Text('Please enter a valid email address')));
       return;
     }
-    if (_usernameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a base username')));
-      return;
-    }
-
-    ref
-        .read(authControllerProvider.notifier)
-        .registerPair(_emailCtrl.text.trim(), _usernameCtrl.text.trim());
+    ref.read(authControllerProvider.notifier).registerPair(email);
   }
 
   @override
@@ -55,9 +46,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     Text(next.error.toString().replaceAll('Exception: ', ''))),
           );
         } else if (!next.isLoading && next.value != null) {
-          setState(() {
-            _credentials = next.value;
-          });
+          setState(() => _credentials = next.value);
         }
       },
     );
@@ -106,7 +95,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Enter a recovery email and a base username.',
+          'Enter a recovery email. Two unique usernames will be generated automatically for you and your partner.',
           style: TextStyle(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ),
@@ -114,20 +103,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         TextField(
           controller: _emailCtrl,
           keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) =>
+              authState.isLoading ? null : _handleRegister(),
           decoration: const InputDecoration(
             labelText: 'Recovery Email',
             prefixIcon: Icon(Icons.email_outlined),
-          ),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: _usernameCtrl,
-          keyboardType: TextInputType.text,
-          onSubmitted: (_) => authState.isLoading ? null : _handleRegister(),
-          decoration: const InputDecoration(
-            labelText: 'Base Username',
-            prefixIcon: Icon(Icons.person_outline),
           ),
         ),
         const SizedBox(height: 24),
@@ -146,8 +127,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.check_circle_rounded,
-                color: AppColors.success, size: 64)
+        const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 64)
             .animate()
             .scale(),
         const SizedBox(height: 16),
@@ -158,7 +138,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Save these credentials before continuing.',
+          'Save these credentials before continuing. They cannot be recovered.',
           style: TextStyle(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ),
@@ -194,6 +174,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           const SizedBox(height: 8),
           SelectableText('Username: $user'),
           SelectableText('Password: $pwd'),
+          const SizedBox(height: 6),
+          const Text(
+            'Use this username to log in. You can change your display name later from your profile.',
+            style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontStyle: FontStyle.italic),
+          ),
         ],
       ),
     );

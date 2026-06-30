@@ -182,6 +182,26 @@ class PushNotificationService {
   /// persisted for the newly authenticated user.
   Future<void> updateTokenForCurrentUser() => _refreshAndSaveToken();
 
+  /// Deletes the FCM token from Firestore and from the device.
+  /// Call this during logout so the user stops receiving push notifications.
+  Future<void> clearTokenForCurrentUser() async {
+    if (kIsWeb) return;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'fcmToken': FieldValue.delete(),
+          'fcmTokenUpdatedAt': FieldValue.delete(),
+        });
+        debugPrint('[FCM] Token removed from Firestore (uid=$uid)');
+      }
+      await _fcm.deleteToken();
+      debugPrint('[FCM] Device token deleted');
+    } catch (e) {
+      debugPrint('[FCM] Failed to clear token: $e');
+    }
+  }
+
   // ── Notification tap handler (foreground) ─────────────────────────────────
 
   void _onForegroundNotificationTapped(NotificationResponse response) {

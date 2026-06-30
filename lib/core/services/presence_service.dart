@@ -14,19 +14,61 @@ final presenceServiceProvider = Provider<PresenceService>((ref) {
 /// Firebase Realtime Database (for reliable onDisconnect) and
 /// Firestore (for rich profile reads). Also provides a stream of
 /// a partner's real-time online status via RTDB.
+///
+/// Presence rules:
+///   • App opens / user logs in → online immediately
+///   • App paused / detached / hidden → offline immediately
+///   • No user interaction for 5 minutes → offline (inactivity)
+///   • Any pointer event (tap, scroll, etc.) → resets inactivity timer; if
+///     offline due to inactivity, restores online immediately
+///   • Network drop → RTDB onDisconnect fires server-side → offline
 class PresenceService with WidgetsBindingObserver {
   String? _uid;
   bool _initialized = false;
   StreamSubscription? _connectedSub;
+
+  Timer? _inactivityTimer;
+  static const _inactivityTimeout = Duration(minutes: 5);
+
+  // Tracks whether we went offline only due to inactivity (vs app backgrounded).
+  bool _offlineDueToInactivity = false;
 
   void initialize(String uid) {
     if (_initialized && _uid == uid) return;
     if (_initialized) _teardown();
     _uid = uid;
     _initialized = true;
+    _offlineDueToInactivity = false;
     WidgetsBinding.instance.addObserver(this);
     _setupRtdbPresence();
     _setFirestoreOnline(true);
+    _resetInactivityTimer();
+  }
+
+  /// Call on every user pointer event (tap, scroll, key press).
+  /// No-op if not yet initialised (user not logged in).
+  void onUserActivity() {
+    if (!_initialized || _uid == null) return;
+    // If we went offline because of inactivity only, come back online now.
+    if (_offlineDueToInactivity) {
+      _offlineDueToInactivity = false;
+      _setFirestoreOnline(true);
+      _setRtdbOnline(true);
+    }
+    _resetInactivityTimer();
+  }
+
+  void _resetInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(_inactivityTimeout, _goOfflineDueToInactivity);
+  }
+
+  void _goOfflineDueToInactivity() {
+    if (!_initialized || _uid == null) return;
+    debugPrint('PresenceService: going offline due to 5-min inactivity');
+    _offlineDueToInactivity = true;
+    _setFirestoreOnline(false);
+    _setRtdbOnline(false);
   }
 
   Future<void> _setupRtdbPresence() async {
@@ -63,12 +105,16 @@ class PresenceService with WidgetsBindingObserver {
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
+        _inactivityTimer?.cancel();
+        _offlineDueToInactivity = false;
         _setFirestoreOnline(false);
         _setRtdbOnline(false);
         break;
       case AppLifecycleState.resumed:
+        _offlineDueToInactivity = false;
         _setFirestoreOnline(true);
         _setRtdbOnline(true);
+        _resetInactivityTimer();
         break;
       default:
         break;
@@ -117,6 +163,8 @@ class PresenceService with WidgetsBindingObserver {
   }
 
   void _teardown() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
     _connectedSub?.cancel();
     _connectedSub = null;
     if (_initialized) {
@@ -125,6 +173,7 @@ class PresenceService with WidgetsBindingObserver {
     _setFirestoreOnline(false);
     _setRtdbOnline(false);
     _initialized = false;
+    _offlineDueToInactivity = false;
     _uid = null;
   }
 

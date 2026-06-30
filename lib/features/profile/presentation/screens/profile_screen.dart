@@ -35,23 +35,34 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isUploading = false;
 
-  // ── Edit nickname ──────────────────────────────────────────────────────────
+  // ── Edit display username ─────────────────────────────────────────────────
 
   Future<void> _editNickname(String current) async {
     final ctrl = TextEditingController(text: current);
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Change Nickname'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter new nickname',
-            border: OutlineInputBorder(),
-          ),
-          maxLength: 30,
-          textCapitalization: TextCapitalization.words,
+        title: const Text('Change Username'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Enter new display name',
+                border: OutlineInputBorder(),
+              ),
+              maxLength: 30,
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'This changes only your display name. Your login username remains the same.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -278,7 +289,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 18),
                       _buildSettingsTile(
                         icon: Icons.person_outline,
-                        title: 'Change Nickname',
+                        title: 'Change Username',
                         subtitle: username,
                         onTap: () => _editNickname(username),
                       ),

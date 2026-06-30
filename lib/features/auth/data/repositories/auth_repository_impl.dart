@@ -16,11 +16,13 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   User? get currentUser => _auth.currentUser;
 
+  // ── Password generation ───────────────────────────────────────────────────
+
   String _generateSecurePassword() {
     const lowers = 'abcdefghijklmnopqrstuvwxyz';
     const uppers = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const numbers = '0123456789';
-    Random rnd = Random();
+    final rnd = Random();
 
     String pass = '';
     pass += uppers[rnd.nextInt(uppers.length)];
@@ -32,47 +34,74 @@ class AuthRepositoryImpl implements AuthRepository {
       pass += allChars[rnd.nextInt(allChars.length)];
     }
 
-    // Shuffle
-    List<String> chars = pass.split('');
+    final chars = pass.split('');
     chars.shuffle(rnd);
     return chars.join('');
   }
 
-  @override
-  Future<Map<String, String>> registerPair(
-      String email, String baseUsername) async {
-    final emailLower = email.toLowerCase().trim();
-    final username1 = baseUsername.trim();
-    final username2 = '${username1}Antn';
+  // ── Username generation ───────────────────────────────────────────────────
 
-    // 1. Check uniqueness of email and usernames
+  static const _adjectives = [
+    'Swift', 'Cosmic', 'Lucky', 'Brave', 'Silent', 'Wild', 'Dark', 'Crystal',
+    'Golden', 'Silver', 'Neon', 'Arctic', 'Velvet', 'Crimson', 'Jade', 'Sapphire',
+    'Mystic', 'Shadow', 'Storm', 'Ember', 'Frost', 'Nova', 'Solar', 'Lunar',
+    'Vivid', 'Stealth', 'Turbo', 'Radiant', 'Obsidian', 'Cobalt', 'Scarlet',
+    'Azure', 'Amber', 'Violet', 'Onyx', 'Ivory', 'Cyan', 'Magenta', 'Teal',
+  ];
+
+  static const _nouns = [
+    'Fox', 'Wolf', 'Star', 'Moon', 'River', 'Hawk', 'Tiger', 'Comet',
+    'Phoenix', 'Falcon', 'Raven', 'Dragon', 'Panda', 'Lynx', 'Eagle',
+    'Cobra', 'Viper', 'Panther', 'Jaguar', 'Sparrow', 'Owl', 'Shark',
+    'Lotus', 'Orchid', 'Cipher', 'Pulse', 'Vortex', 'Blaze', 'Phantom', 'Echo',
+    'Arrow', 'Blade', 'Dusk', 'Flare', 'Glyph', 'Halo', 'Iris', 'Kite',
+  ];
+
+  /// Generates a random username of the form [Adjective][Noun][4-digit number]
+  /// and retries until one is not already in Firestore.
+  Future<String> _generateUniqueUsername() async {
+    final rnd = Random();
+    while (true) {
+      final adj = _adjectives[rnd.nextInt(_adjectives.length)];
+      final noun = _nouns[rnd.nextInt(_nouns.length)];
+      final number = 1000 + rnd.nextInt(9000); // 1000–9999
+      final candidate = '$adj$noun$number';
+
+      final existing = await _firestore
+          .collection('users')
+          .where('username', isEqualTo: candidate)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isEmpty) return candidate;
+      // collision — loop and try again
+    }
+  }
+
+  // ── registerPair ──────────────────────────────────────────────────────────
+
+  @override
+  Future<Map<String, String>> registerPair(String email) async {
+    final emailLower = email.toLowerCase().trim();
+
+    // 1. Guard: email must not already be registered
     final regDoc =
         await _firestore.collection('registrations').doc(emailLower).get();
     if (regDoc.exists) {
       throw Exception('This email is already registered.');
     }
 
-    final q1 = await _firestore
-        .collection('users')
-        .where('username', isEqualTo: username1)
-        .get();
-    final q2 = await _firestore
-        .collection('users')
-        .where('username', isEqualTo: username2)
-        .get();
+    // 2. Auto-generate two unique usernames
+    final username1 = await _generateUniqueUsername();
+    final username2 = await _generateUniqueUsername();
 
-    if (q1.docs.isNotEmpty || q2.docs.isNotEmpty) {
-      throw Exception(
-          'Username "$baseUsername" is already taken. Please choose another.');
-    }
-
-    // 2. Generate Shared Password
+    // 3. Shared password
     final password = _generateSecurePassword();
 
-    final user1Email = '$username1@hisoka.com'.toLowerCase();
-    final user2Email = '$username2@hisoka.com'.toLowerCase();
+    final user1Email = '${username1.toLowerCase()}@hisoka.com';
+    final user2Email = '${username2.toLowerCase()}@hisoka.com';
 
-    // 3. Create Firebase Auth Accounts
+    // 4. Create Firebase Auth accounts
     final u1Cred = await _auth.createUserWithEmailAndPassword(
         email: user1Email, password: password);
     final uid1 = u1Cred.user!.uid;
@@ -81,10 +110,9 @@ class AuthRepositoryImpl implements AuthRepository {
         email: user2Email, password: password);
     final uid2 = u2Cred.user!.uid;
 
-    // 4. Save to Firestore
+    // 5. Write to Firestore in one batch
     final batch = _firestore.batch();
 
-    // Registration Doc
     batch.set(_firestore.collection('registrations').doc(emailLower), {
       'createdAt': FieldValue.serverTimestamp(),
       'username1': username1,
@@ -102,8 +130,7 @@ class AuthRepositoryImpl implements AuthRepository {
     final user1 = UserModel(
       uid: uid1,
       username: username1,
-      registeredEmail:
-          pairRef.id, // Recycled field to prevent breaking freezed models
+      registeredEmail: pairRef.id,
       partnerUid: uid2,
       isOnline: false,
     );
@@ -118,7 +145,8 @@ class AuthRepositoryImpl implements AuthRepository {
     );
     batch.set(_firestore.collection('users').doc(uid2), user2.toJson());
 
-    final roomId = uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
+    final roomId =
+        uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
     batch.set(_firestore.collection('chat_rooms').doc(roomId), {
       'participants': [uid1, uid2],
       'lastMessage': '',
@@ -127,7 +155,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
     await batch.commit();
 
-    // Re-authenticate as user1 so the creator is automatically logged in correctly
+    // 6. Sign in as user1 so the registering device is ready to use
     await _auth.signInWithEmailAndPassword(
         email: user1Email, password: password);
 
@@ -138,26 +166,24 @@ class AuthRepositoryImpl implements AuthRepository {
     };
   }
 
+  // ── loginWithUsername ─────────────────────────────────────────────────────
+
   @override
   Future<void> loginWithUsername(String username, String password) async {
     final cleanUsername = username.trim().toLowerCase();
 
     try {
-      // First attempt: Try logging in with the new domain
-      final newEmail = '$cleanUsername@hisoka.com';
       await _auth.signInWithEmailAndPassword(
-          email: newEmail, password: password);
+          email: '$cleanUsername@hisoka.com', password: password);
     } on FirebaseAuthException catch (e) {
-      // If it fails because the account doesn't exist with the new domain, try the legacy domain
       if (e.code == 'invalid-credential' ||
           e.code == 'user-not-found' ||
           e.code == 'wrong-password') {
+        // Fallback: legacy domain for older accounts
         try {
-          final legacyEmail = '$cleanUsername@anatanotameni.local';
           await _auth.signInWithEmailAndPassword(
-              email: legacyEmail, password: password);
-        } catch (legacyError) {
-          // If the legacy domain also fails, throw the original error
+              email: '$cleanUsername@anatanotameni.local', password: password);
+        } catch (_) {
           throw Exception('Invalid username or password.');
         }
       } else {
@@ -165,11 +191,12 @@ class AuthRepositoryImpl implements AuthRepository {
       }
     }
 
-    // Set online status
     if (_auth.currentUser != null) {
       await updateOnlineStatus(_auth.currentUser!.uid, true);
     }
   }
+
+  // ── signOut ───────────────────────────────────────────────────────────────
 
   @override
   Future<void> signOut() async {
@@ -178,6 +205,8 @@ class AuthRepositoryImpl implements AuthRepository {
     }
     await _auth.signOut();
   }
+
+  // ── Profile ───────────────────────────────────────────────────────────────
 
   @override
   Future<UserModel?> getUserProfile(String uid) async {
@@ -190,9 +219,8 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> updateOnlineStatus(String uid, bool isOnline) async {
-    await _firestore.collection('users').doc(uid).update({
-      'isOnline': isOnline,
-      'lastSeen': isOnline ? null : FieldValue.serverTimestamp(),
-    });
+    final update = <String, dynamic>{'isOnline': isOnline};
+    if (!isOnline) update['lastSeen'] = FieldValue.serverTimestamp();
+    await _firestore.collection('users').doc(uid).update(update);
   }
 }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../../../core/services/push_notification_service.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(FirebaseAuth.instance, FirebaseFirestore.instance);
@@ -14,13 +15,17 @@ final authStateProvider = StreamProvider<User?>((ref) {
 
 class AuthController extends StateNotifier<AsyncValue<Map<String, String>?>> {
   final AuthRepository _authRepository;
+  final PushNotificationService _pushService;
 
-  AuthController(this._authRepository) : super(const AsyncValue.data(null));
+  AuthController(this._authRepository, this._pushService)
+      : super(const AsyncValue.data(null));
 
-  Future<void> registerPair(String email, String username) async {
+  Future<void> registerPair(String email) async {
     state = const AsyncValue.loading();
     try {
-      final creds = await _authRepository.registerPair(email, username);
+      final creds = await _authRepository.registerPair(email);
+      // Persist FCM token for the newly signed-in user
+      await _pushService.updateTokenForCurrentUser();
       state = AsyncValue.data(creds);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -31,6 +36,8 @@ class AuthController extends StateNotifier<AsyncValue<Map<String, String>?>> {
     state = const AsyncValue.loading();
     try {
       await _authRepository.loginWithUsername(username, password);
+      // Persist a fresh FCM token for this user session
+      await _pushService.updateTokenForCurrentUser();
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -38,6 +45,8 @@ class AuthController extends StateNotifier<AsyncValue<Map<String, String>?>> {
   }
 
   Future<void> logout() async {
+    // Remove FCM token before signing out so notifications stop immediately
+    await _pushService.clearTokenForCurrentUser();
     await _authRepository.signOut();
   }
 }
@@ -45,5 +54,8 @@ class AuthController extends StateNotifier<AsyncValue<Map<String, String>?>> {
 final authControllerProvider =
     StateNotifierProvider<AuthController, AsyncValue<Map<String, String>?>>(
         (ref) {
-  return AuthController(ref.watch(authRepositoryProvider));
+  return AuthController(
+    ref.watch(authRepositoryProvider),
+    ref.watch(pushNotificationServiceProvider),
+  );
 });

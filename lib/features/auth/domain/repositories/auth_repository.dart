@@ -5,9 +5,9 @@ abstract class AuthRepository {
   Stream<User?> get authStateChanges;
   User? get currentUser;
 
-  /// Register an email and base username to create two paired accounts
-  /// Returns the credentials to be shown
-  Future<Map<String, String>> registerPair(String email, String baseUsername);
+  /// Register a recovery email to create two paired accounts with auto-generated usernames.
+  /// Returns the credentials map: user1_name, user2_name, password.
+  Future<Map<String, String>> registerPair(String email);
 
   /// Login with generated username and password
   Future<void> loginWithUsername(String username, String password);

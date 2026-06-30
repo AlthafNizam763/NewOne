@@ -6,6 +6,7 @@ import 'config/theme.dart';
 import 'config/theme_mode_provider.dart';
 import 'routes/app_router.dart';
 import 'core/services/push_notification_service.dart';
+import 'core/services/presence_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,13 +36,17 @@ class AnataNoTameNiApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeControllerProvider);
-    return MaterialApp.router(
-      title: 'Hisoka',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
-      routerConfig: appRouter,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => ref.read(presenceServiceProvider).onUserActivity(),
+      child: MaterialApp.router(
+        title: 'Hisoka',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        routerConfig: appRouter,
+      ),
     );
   }
 }
