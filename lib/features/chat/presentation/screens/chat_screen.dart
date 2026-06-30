@@ -1441,12 +1441,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       onTap: canView
           ? () async {
               setState(() => _openingViewOnce.add(msgId));
+              // Mark as opened BEFORE showing — prevents re-viewing on back
               await ref
                   .read(chatRepositoryProvider)
                   .markViewOnceOpened(_roomId!, msgId);
               if (!mounted) return;
               if (type == 'video') {
-                _showFullScreenVideo(context, mediaUrl);
+                // Use the secure view-once player (no scrubber, auto-close)
+                _showViewOnceVideo(context, mediaUrl);
               } else {
                 _showFullScreenImage(context, mediaUrl);
               }
@@ -1457,12 +1459,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.backgroundDark.withValues(alpha: 0.3),
-          borderRadius:
-              BorderRadius.circular(AppGlass.radiusSmall),
+          borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
           border: Border.all(
             color: canView
                 ? AppColors.primaryGlow
@@ -1472,17 +1472,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Icon reflects current state
             Icon(
               opened
                   ? Icons.visibility_off_outlined
                   : (isMe
                       ? Icons.timer_outlined
                       : (type == 'video'
-                          ? Icons.videocam_rounded
+                          ? Icons.play_circle_outline_rounded
                           : Icons.looks_one_rounded)),
               color: canView
                   ? AppColors.primaryGlow
                   : AppColors.textSecondary,
+              size: 28,
             ),
             const SizedBox(width: 10),
             Column(
@@ -1525,6 +1527,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   // ── Message composer ────────────────────────────────────────────────────────
+
+  // ── View-once video secure launcher ─────────────────────────────────────────
+
+  void _showViewOnceVideo(BuildContext context, String url) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        pageBuilder: (_, __, ___) => _ViewOnceVideoPage(url: url),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
 
   Widget _buildMessageComposer() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1977,8 +1993,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 isDark
                     ? const Color(0xFF2A2A2A)
                     : const Color(0xFF1A1A1A),
-                'View once',
+                'View once 📷',
                 () => _pickAndSendImage(ImageSource.gallery,
+                    popMenu: true, viewOnce: true)),
+            _buildAttachIcon(
+                Icons.play_circle_outline_rounded,
+                isDark
+                    ? const Color(0xFF1A1A2A)
+                    : const Color(0xFF111122),
+                'View once 🎥',
+                () => _pickAndSendVideo(ImageSource.gallery,
                     popMenu: true, viewOnce: true)),
             _buildAttachIcon(
                 Icons.location_on_rounded,
@@ -2762,6 +2786,236 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                       size: 36,
                     ),
                   ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── View-once video page ────────────────────────────────────────────────────
+//
+// Security properties:
+//   • Marks the message as opened in Firestore BEFORE this page is shown,
+//     so going back doesn't reset the viewed state.
+//   • Non-interactive linear progress bar — no scrubbing / seeking.
+//   • Auto-plays on load; auto-pops 1 s after the video ends.
+//   • No replay — once the video reaches the end the "expired" overlay shows.
+//   • Play/Pause is intentionally allowed (user may need to pause briefly)
+//     but the video cannot be restarted after completion.
+
+class _ViewOnceVideoPage extends StatefulWidget {
+  final String url;
+  const _ViewOnceVideoPage({required this.url});
+
+  @override
+  State<_ViewOnceVideoPage> createState() => _ViewOnceVideoPageState();
+}
+
+class _ViewOnceVideoPageState extends State<_ViewOnceVideoPage> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+  bool _completed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _initialized = true);
+        _controller.play();
+      });
+    _controller.setLooping(false);
+    _controller.addListener(_onVideoProgress);
+  }
+
+  void _onVideoProgress() {
+    if (!mounted || !_controller.value.isInitialized || _completed) return;
+    final pos = _controller.value.position;
+    final dur = _controller.value.duration;
+    if (dur.inMilliseconds > 0 &&
+        !_controller.value.isPlaying &&
+        pos >= dur - const Duration(milliseconds: 200)) {
+      setState(() => _completed = true);
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onVideoProgress);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    final botPad = MediaQuery.of(context).padding.bottom;
+
+    final position = _initialized ? _controller.value.position : Duration.zero;
+    final duration = _initialized ? _controller.value.duration : Duration.zero;
+    final progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // ── Video ───────────────────────────────────────────────────────
+          Center(
+            child: _initialized
+                ? AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: VideoPlayer(_controller),
+                  )
+                : const CircularProgressIndicator(color: Colors.white70),
+          ),
+
+          // ── Non-interactive progress bar ─────────────────────────────
+          if (_initialized)
+            Positioned(
+              top: topPad,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white24,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                minHeight: 3,
+              ),
+            ),
+
+          // ── Header row: close · "View Once" badge · timer ────────────
+          Positioned(
+            top: topPad + 10,
+            left: 12,
+            right: 12,
+            child: Row(
+              children: [
+                // Close button
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
+                const Spacer(),
+                // "View Once" badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.timer_rounded,
+                          color: Colors.white70, size: 14),
+                      SizedBox(width: 5),
+                      Text('View Once',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Elapsed / duration counter
+                if (_initialized)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_fmt(position)} / ${_fmt(duration)}',
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Play / Pause button (centre bottom) ──────────────────────
+          if (_initialized && !_completed)
+            Positioned(
+              bottom: botPad + 28,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _controller.value.isPlaying
+                        ? _controller.pause()
+                        : _controller.play();
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _controller.value.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // ── Expired overlay (shown after video ends) ─────────────────
+          if (_completed)
+            Container(
+              color: Colors.black.withValues(alpha: 0.88),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility_off_rounded,
+                        color: Colors.white38, size: 72),
+                    SizedBox(height: 18),
+                    Text(
+                      'Video has expired',
+                      style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'This was a view-once video',
+                      style: TextStyle(
+                          color: Colors.white38, fontSize: 14),
+                    ),
+                  ],
                 ),
               ),
             ),
