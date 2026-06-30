@@ -20,10 +20,12 @@ class AuthController extends StateNotifier<AsyncValue<Map<String, String>?>> {
   AuthController(this._authRepository, this._pushService)
       : super(const AsyncValue.data(null));
 
-  Future<void> registerPair(String email) async {
+  Future<void> registerPair(
+      String email, String username1, String username2) async {
     state = const AsyncValue.loading();
     try {
-      final creds = await _authRepository.registerPair(email);
+      final creds =
+          await _authRepository.registerPair(email, username1, username2);
       // Persist FCM token for the newly signed-in user
       await _pushService.updateTokenForCurrentUser();
       state = AsyncValue.data(creds);

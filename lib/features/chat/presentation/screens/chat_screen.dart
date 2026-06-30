@@ -78,7 +78,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
-  bool _isLocked = false;
   int _recordingSeconds = 0;
   Timer? _recordingTimer;
 
@@ -1544,12 +1543,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildMessageComposer() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fabColor = _isRecording
-        ? AppColors.error
-        : (isDark ? Colors.white : const Color(0xFF0A0A0A));
-    final fabIconColor = _isRecording
-        ? Colors.white
-        : (isDark ? Colors.black : Colors.white);
 
     return Container(
       color: Colors.transparent,
@@ -1558,116 +1551,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Recording overlay ────────────────────────────────
-          if (_isRecording && !_isLocked)
-            GestureDetector(
-              onHorizontalDragEnd: (details) {
-                if (details.velocity.pixelsPerSecond.dx < -300) {
-                  _cancelRecording();
-                }
-              },
-              child: Container(
-                height: 56,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.surfaceDark
-                      : AppColors.surfaceLight,
-                  borderRadius:
-                      BorderRadius.circular(AppGlass.radiusPill),
-                  border: Border.all(color: AppColors.borderStrong),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.delete_rounded,
-                          color: AppColors.error, size: 22),
-                      onPressed: _cancelRecording,
-                    ),
-                    const Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.arrow_back_ios_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary),
-                          SizedBox(width: 4),
-                          Text('Slide to cancel',
-                              style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                    const _PulsingMic(color: AppColors.error),
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatRecordingTime(_recordingSeconds),
-                      style: const TextStyle(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _lockRecording,
-                      child: const Icon(Icons.lock_outline_rounded,
-                          color: AppColors.textSecondary, size: 22),
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Locked recording bar ─────────────────────────────
-          if (_isLocked)
-            Container(
-              height: 56,
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.close,
-                        color: AppColors.error, size: 20),
-                    label: const Text('Cancel',
-                        style: TextStyle(color: AppColors.error)),
-                    onPressed: _cancelRecording,
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.lock_rounded,
-                              color: AppColors.success, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            _formatRecordingTime(_recordingSeconds),
-                            style: const TextStyle(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.send_rounded, size: 18),
-                    label: const Text('Send'),
-                    onPressed: _stopRecordingAndSend,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      foregroundColor: Colors.white,
-                      shape: const StadiumBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
           // ── Edit preview ─────────────────────────────────────
           if (_editingMessageId != null && !_isRecording)
             Container(
@@ -1700,7 +1583,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
 
           // ── Reply preview ────────────────────────────────────
-          if (_replyMessage != null && _editingMessageId == null && !_isRecording)
+          if (_replyMessage != null &&
+              _editingMessageId == null &&
+              !_isRecording)
             Container(
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(bottom: 8),
@@ -1734,7 +1619,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         const SizedBox(height: 4),
                         Text(
                           () {
-                            final t = _replyMessage!['text'] as String?;
+                            final t =
+                                _replyMessage!['text'] as String?;
                             if (t != null && t.isNotEmpty) return t;
                             return _getMediaLabel(
                                 _replyMessage!['type'] as String?);
@@ -1759,170 +1645,204 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
 
           // ── Main input row ────────────────────────────────────
-          if (!_isLocked)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: _isRecording
+                    ? _buildRecordingIndicator()
+                    : _buildTextInputContainer(isDark),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: _buildFab(isDark),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextInputContainer(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.elevatedDark,
+        borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+        border: Border.all(color: AppColors.borderStrong),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: IconButton(
+              icon: Icon(
+                  _showEmoji
+                      ? Icons.keyboard_rounded
+                      : Icons.emoji_emotions_outlined,
+                  color: AppColors.textSecondary,
+                  size: 26),
+              onPressed: () {
+                FocusScope.of(context).unfocus();
+                setState(() => _showEmoji = !_showEmoji);
+              },
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _msgCtrl,
+              onChanged: _onTextChanged,
+              onTap: () => setState(() => _showEmoji = false),
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 16),
+              minLines: 1,
+              maxLines: 6,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                hintText: 'Message',
+                hintStyle: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 16),
+                border: InputBorder.none,
+                contentPadding:
+                    EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (!_isRecording)
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.elevatedDark,
-                        borderRadius: BorderRadius.circular(
-                            AppGlass.radiusPill),
-                        border: Border.all(
-                            color: AppColors.borderStrong),
-                      ),
-                      child: Row(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.end,
-                        children: [
-                          Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: 4),
-                            child: IconButton(
-                              icon: Icon(
-                                  _showEmoji
-                                      ? Icons.keyboard_rounded
-                                      : Icons
-                                          .emoji_emotions_outlined,
-                                  color: AppColors.textSecondary,
-                                  size: 26),
-                              onPressed: () {
-                                FocusScope.of(context).unfocus();
-                                setState(
-                                    () => _showEmoji = !_showEmoji);
-                              },
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _msgCtrl,
-                              onChanged: _onTextChanged,
-                              onTap: () => setState(
-                                  () => _showEmoji = false),
-                              style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 16),
-                              minLines: 1,
-                              maxLines: 6,
-                              textCapitalization:
-                                  TextCapitalization.sentences,
-                              decoration: const InputDecoration(
-                                hintText: 'Message',
-                                hintStyle: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 16),
-                                border: InputBorder.none,
-                                contentPadding:
-                                    EdgeInsets.symmetric(
-                                        vertical: 14),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                      Icons.attach_file_rounded,
-                                      color: AppColors.textSecondary,
-                                      size: 24),
-                                  onPressed: _showAttachmentMenu,
-                                ),
-                                ValueListenableBuilder<
-                                    TextEditingValue>(
-                                  valueListenable: _msgCtrl,
-                                  builder: (context, value, child) {
-                                    if (value.text.trim().isEmpty) {
-                                      return IconButton(
-                                        icon: const Icon(
-                                            Icons.camera_alt_rounded,
-                                            color:
-                                                AppColors.textSecondary,
-                                            size: 24),
-                                        onPressed: () =>
-                                            _pickAndSendImage(
-                                                ImageSource.camera),
-                                      );
-                                    }
-                                    return const SizedBox(width: 8);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  const Spacer(),
-                const SizedBox(width: 8),
-                // ── Send / Mic FAB ────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: fabColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: fabColor.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _msgCtrl,
-                      builder: (context, value, _) {
-                        final hasText =
-                            value.text.trim().isNotEmpty;
-                        return GestureDetector(
-                          onTap: hasText
-                              ? _sendMessage
-                              : (_isRecording
-                                  ? _stopRecordingAndSend
-                                  : null),
-                          onLongPress:
-                              (hasText || _isRecording)
-                                  ? null
-                                  : _startRecording,
-                          onLongPressEnd:
-                              (hasText || _isLocked)
-                                  ? null
-                                  : (_isRecording
-                                      ? (_) =>
-                                          _stopRecordingAndSend()
-                                      : null),
-                          child: Center(
-                            child: Icon(
-                              hasText
-                                  ? (_editingMessageId != null
-                                      ? Icons.check_rounded
-                                      : Icons.send_rounded)
-                                  : (_isRecording
-                                      ? Icons.stop_circle_rounded
-                                      : Icons.mic_rounded),
-                              color: fabIconColor,
-                              size: _isRecording ? 30 : 24,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.attach_file_rounded,
+                      color: AppColors.textSecondary, size: 24),
+                  onPressed: _showAttachmentMenu,
+                ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _msgCtrl,
+                  builder: (context, value, child) {
+                    if (value.text.trim().isEmpty) {
+                      return IconButton(
+                        icon: const Icon(Icons.camera_alt_rounded,
+                            color: AppColors.textSecondary,
+                            size: 24),
+                        onPressed: () =>
+                            _pickAndSendImage(ImageSource.camera),
+                      );
+                    }
+                    return const SizedBox(width: 8);
+                  },
                 ),
               ],
             ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRecordingIndicator() {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.elevatedDark,
+        borderRadius: BorderRadius.circular(AppGlass.radiusPill),
+        border: Border.all(
+            color: AppColors.error.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.delete_rounded,
+                color: AppColors.error, size: 22),
+            onPressed: _cancelRecording,
+            tooltip: 'Discard',
+          ),
+          const _PulsingMic(color: AppColors.error),
+          const SizedBox(width: 8),
+          Text(
+            _formatRecordingTime(_recordingSeconds),
+            style: const TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Recording…',
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFab(bool isDark) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _msgCtrl,
+      builder: (context, value, _) {
+        final hasText = value.text.trim().isNotEmpty;
+        final bgColor = _isRecording
+            ? AppColors.success
+            : (isDark ? Colors.white : const Color(0xFF0A0A0A));
+        final iconColor =
+            (_isRecording || !isDark) ? Colors.white : Colors.black;
+
+        return GestureDetector(
+          onTap: () {
+            if (_isRecording) {
+              _stopRecordingAndSend();
+            } else if (hasText) {
+              _sendMessage();
+            } else {
+              _startRecording();
+            }
+          },
+          child: Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: bgColor.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  _isRecording
+                      ? Icons.send_rounded
+                      : (hasText
+                          ? (_editingMessageId != null
+                              ? Icons.check_rounded
+                              : Icons.send_rounded)
+                          : Icons.mic_rounded),
+                  color: iconColor,
+                  size: 24,
+                  key: ValueKey(
+                    _isRecording
+                        ? 'send_rec'
+                        : (hasText ? 'send' : 'mic'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2289,7 +2209,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (!mounted) return;
         setState(() {
           _isRecording = true;
-          _isLocked = false;
           _recordingSeconds = 0;
         });
         // Update Firestore recording status for partner to see
@@ -2329,7 +2248,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _isRecording = false;
-        _isLocked = false;
         _recordingSeconds = 0;
       });
       if (path != null &&
@@ -2364,7 +2282,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _isRecording = false;
-        _isLocked = false;
         _isUploading = false;
         _recordingSeconds = 0;
       });
@@ -2387,16 +2304,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (mounted) {
       setState(() {
         _isRecording = false;
-        _isLocked = false;
         _recordingSeconds = 0;
       });
     }
-  }
-
-  void _lockRecording() {
-    if (!_isRecording) return;
-    HapticFeedback.mediumImpact();
-    setState(() => _isLocked = true);
   }
 
   String _formatRecordingTime(int seconds) {

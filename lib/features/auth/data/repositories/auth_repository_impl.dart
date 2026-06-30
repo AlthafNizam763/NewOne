@@ -16,7 +16,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   User? get currentUser => _auth.currentUser;
 
-  // ── Password generation ───────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _generateSecurePassword() {
     const lowers = 'abcdefghijklmnopqrstuvwxyz';
@@ -39,69 +39,68 @@ class AuthRepositoryImpl implements AuthRepository {
     return chars.join('');
   }
 
-  // ── Username generation ───────────────────────────────────────────────────
+  // ── isUsernameAvailable ───────────────────────────────────────────────────
 
-  static const _adjectives = [
-    'Swift', 'Cosmic', 'Lucky', 'Brave', 'Silent', 'Wild', 'Dark', 'Crystal',
-    'Golden', 'Silver', 'Neon', 'Arctic', 'Velvet', 'Crimson', 'Jade', 'Sapphire',
-    'Mystic', 'Shadow', 'Storm', 'Ember', 'Frost', 'Nova', 'Solar', 'Lunar',
-    'Vivid', 'Stealth', 'Turbo', 'Radiant', 'Obsidian', 'Cobalt', 'Scarlet',
-    'Azure', 'Amber', 'Violet', 'Onyx', 'Ivory', 'Cyan', 'Magenta', 'Teal',
-  ];
-
-  static const _nouns = [
-    'Fox', 'Wolf', 'Star', 'Moon', 'River', 'Hawk', 'Tiger', 'Comet',
-    'Phoenix', 'Falcon', 'Raven', 'Dragon', 'Panda', 'Lynx', 'Eagle',
-    'Cobra', 'Viper', 'Panther', 'Jaguar', 'Sparrow', 'Owl', 'Shark',
-    'Lotus', 'Orchid', 'Cipher', 'Pulse', 'Vortex', 'Blaze', 'Phantom', 'Echo',
-    'Arrow', 'Blade', 'Dusk', 'Flare', 'Glyph', 'Halo', 'Iris', 'Kite',
-  ];
-
-  /// Generates a random username of the form [Adjective][Noun][4-digit number]
-  /// and retries until one is not already in Firestore.
-  Future<String> _generateUniqueUsername() async {
-    final rnd = Random();
-    while (true) {
-      final adj = _adjectives[rnd.nextInt(_adjectives.length)];
-      final noun = _nouns[rnd.nextInt(_nouns.length)];
-      final number = 1000 + rnd.nextInt(9000); // 1000–9999
-      final candidate = '$adj$noun$number';
-
-      final existing = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: candidate)
-          .limit(1)
-          .get();
-
-      if (existing.docs.isEmpty) return candidate;
-      // collision — loop and try again
-    }
+  @override
+  Future<bool> isUsernameAvailable(String username) async {
+    final normalized = username.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    final q = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: normalized)
+        .limit(1)
+        .get();
+    return q.docs.isEmpty;
   }
 
   // ── registerPair ──────────────────────────────────────────────────────────
 
   @override
-  Future<Map<String, String>> registerPair(String email) async {
+  Future<Map<String, String>> registerPair(
+      String email, String username1, String username2) async {
     final emailLower = email.toLowerCase().trim();
+    // Normalise to lowercase — Firebase Auth emails are always lowercase
+    final u1 = username1.trim().toLowerCase();
+    final u2 = username2.trim().toLowerCase();
 
-    // 1. Guard: email must not already be registered
+    // 1. Email must not already be registered
     final regDoc =
         await _firestore.collection('registrations').doc(emailLower).get();
     if (regDoc.exists) {
       throw Exception('This email is already registered.');
     }
 
-    // 2. Auto-generate two unique usernames
-    final username1 = await _generateUniqueUsername();
-    final username2 = await _generateUniqueUsername();
+    // 2. Both usernames must be distinct
+    if (u1 == u2) {
+      throw Exception('User 1 and User 2 must have different usernames.');
+    }
 
-    // 3. Shared password
+    // 3. Both usernames must be available (race-condition guard)
+    final q1 = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: u1)
+        .limit(1)
+        .get();
+    if (q1.docs.isNotEmpty) {
+      throw Exception('Username "$u1" was just taken. Please choose another.');
+    }
+
+    final q2 = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: u2)
+        .limit(1)
+        .get();
+    if (q2.docs.isNotEmpty) {
+      throw Exception('Username "$u2" was just taken. Please choose another.');
+    }
+
+    // 4. Shared password
     final password = _generateSecurePassword();
 
-    final user1Email = '${username1.toLowerCase()}@hisoka.com';
-    final user2Email = '${username2.toLowerCase()}@hisoka.com';
+    final user1Email = '$u1@hisoka.com';
+    final user2Email = '$u2@hisoka.com';
 
-    // 4. Create Firebase Auth accounts
+    // 5. Create Firebase Auth accounts
     final u1Cred = await _auth.createUserWithEmailAndPassword(
         email: user1Email, password: password);
     final uid1 = u1Cred.user!.uid;
@@ -110,26 +109,26 @@ class AuthRepositoryImpl implements AuthRepository {
         email: user2Email, password: password);
     final uid2 = u2Cred.user!.uid;
 
-    // 5. Write to Firestore in one batch
+    // 6. Write to Firestore in one batch
     final batch = _firestore.batch();
 
     batch.set(_firestore.collection('registrations').doc(emailLower), {
       'createdAt': FieldValue.serverTimestamp(),
-      'username1': username1,
-      'username2': username2,
+      'username1': u1,
+      'username2': u2,
     });
 
     final pairRef = _firestore.collection('pairs').doc();
     batch.set(pairRef, {
       'pairId': pairRef.id,
-      'username1': username1,
-      'username2': username2,
+      'username1': u1,
+      'username2': u2,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
     final user1 = UserModel(
       uid: uid1,
-      username: username1,
+      username: u1,
       registeredEmail: pairRef.id,
       partnerUid: uid2,
       isOnline: false,
@@ -138,7 +137,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
     final user2 = UserModel(
       uid: uid2,
-      username: username2,
+      username: u2,
       registeredEmail: pairRef.id,
       partnerUid: uid1,
       isOnline: false,
@@ -155,13 +154,13 @@ class AuthRepositoryImpl implements AuthRepository {
 
     await batch.commit();
 
-    // 6. Sign in as user1 so the registering device is ready to use
+    // 7. Sign in as user1 so the registering device is immediately active
     await _auth.signInWithEmailAndPassword(
         email: user1Email, password: password);
 
     return {
-      'user1_name': username1,
-      'user2_name': username2,
+      'user1_name': u1,
+      'user2_name': u2,
       'password': password,
     };
   }
