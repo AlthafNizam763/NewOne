@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../core/widgets/app_chrome.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -43,8 +44,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<String> _resolveDestination() async {
     final user = await FirebaseAuth.instance.authStateChanges().first;
     if (user == null) return '/login';
+
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getBool('app_lock_enabled') ?? false) ? '/lock' : '/home';
+    final isLocked = prefs.getBool('app_lock_enabled') ?? false;
+
+    // If the app was launched by tapping a terminated-state notification,
+    // navigate to the relevant screen instead of home (lock screen takes
+    // precedence so the user still has to authenticate first).
+    final notifData = ref
+        .read(pushNotificationServiceProvider)
+        .consumeInitialNotification();
+    if (notifData != null && notifData['type'] == 'chat') {
+      return isLocked ? '/lock' : '/chat';
+    }
+
+    return isLocked ? '/lock' : '/home';
   }
 
   @override

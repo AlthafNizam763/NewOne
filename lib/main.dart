@@ -11,15 +11,14 @@ import 'core/services/presence_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize Riverpod Container
   final container = ProviderContainer();
 
-  // Initialize Push Notifications
+  // init() is non-blocking — permission dialog and token fetch happen in the
+  // background so runApp() is not delayed.
   await container.read(pushNotificationServiceProvider).init();
 
   runApp(
@@ -30,11 +29,35 @@ void main() async {
   );
 }
 
-class AnataNoTameNiApp extends ConsumerWidget {
+class AnataNoTameNiApp extends ConsumerStatefulWidget {
   const AnataNoTameNiApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AnataNoTameNiApp> createState() => _AnataNoTameNiAppState();
+}
+
+class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Wire notification taps → GoRouter navigation.
+    // appRouter.go() works without a BuildContext since GoRouter holds its
+    // own navigator state via rootNavigatorKey.
+    // This callback fires for:
+    //   • background→foreground taps  (onMessageOpenedApp)
+    //   • foreground local notification taps  (flutter_local_notifications)
+    // Terminated-state taps are handled separately in SplashScreen via
+    // consumeInitialNotification().
+    ref.read(pushNotificationServiceProvider).onNotificationTap = (data) {
+      final type = data['type'] as String?;
+      if (type == 'chat') {
+        appRouter.go('/chat');
+      }
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeControllerProvider);
     return Listener(
       behavior: HitTestBehavior.translucent,

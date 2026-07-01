@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../presentation/screens/splash_screen.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
@@ -14,7 +15,12 @@ import '../features/calls/presentation/screens/call_history_screen.dart';
 import '../features/stories/presentation/screens/stories_list_screen.dart';
 import '../features/stories/presentation/screens/story_view_screen.dart';
 
+/// Shared navigator key exposed so that [PushNotificationService] can drive
+/// navigation from notification tap callbacks without needing a BuildContext.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/',
   routes: [
     GoRoute(

@@ -2,35 +2,40 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, debugPrint, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../firebase_options.dart';
 
-// ── Notification channels (declared at top level so background handler can reach them) ─
+// ── Notification channels ─────────────────────────────────────────────────────
+// Declared at top level so the background isolate handler can reference them.
 
-const _chatChannelId = 'chat_messages_channel';
+const _chatChannelId   = 'chat_messages_channel';
 const _chatChannelName = 'Chat Messages';
 
-const _onlineChannelId = 'online_status_channel';
-const _onlineChannelName = 'Online Status Notifications';
+const _onlineChannelId   = 'online_status_channel';
+const _onlineChannelName = 'Online Status';
 
-// ── Background handler — runs in a separate isolate, MUST be top-level ──────
+// ── Background message handler ────────────────────────────────────────────────
+// Must be a top-level function — runs in a separate isolate when the app is
+// killed. Firebase is NOT initialized in that isolate, so we do it here.
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Background isolate has NO Firebase — must initialize before any Firebase call.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  debugPrint('[FCM] Background message: ${message.messageId} '
-      '| title: ${message.notification?.title}');
+  debugPrint('[FCM] Background message received: '
+      '${message.messageId} | ${message.notification?.title}');
 }
 
-// ── Background notification tap handler — must be top-level ─────────────────
+// ── Background local-notification tap handler ─────────────────────────────────
+// Also must be top-level per flutter_local_notifications v21 contract.
 
 @pragma('vm:entry-point')
-void _onBackgroundNotificationTapped(NotificationResponse response) {
-  debugPrint('[FCM] Background notification tapped | payload: ${response.payload}');
+void _onBackgroundLocalNotificationTapped(NotificationResponse response) {
+  debugPrint('[FCM] Background local tap | payload: ${response.payload}');
+  // Navigation from this point is handled by the app when it resumes.
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -44,84 +49,107 @@ final pushNotificationServiceProvider =
 
 class PushNotificationService {
   final FirebaseMessaging _fcm;
-  final FlutterLocalNotificationsPlugin _localNotifications =
+  final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
 
-  /// Optional callback invoked when the user taps a notification.
-  /// Register this from your router/shell to perform navigation.
-  /// [data] contains the FCM message's data payload (e.g. {'roomId': '...'}).
+  // ── Navigation callback ───────────────────────────────────────────────────
+  // Set once in AnataNoTameNiApp.initState() so the service can drive
+  // GoRouter from background / foreground notification taps.
+  // (For terminated-state taps, see consumeInitialNotification() instead.)
   void Function(Map<String, dynamic> data)? onNotificationTap;
+
+  // Holds the data payload when the app was opened from a terminated-state
+  // notification. Consumed exactly once by SplashScreen._resolveDestination().
+  Map<String, dynamic>? _pendingInitialMessage;
 
   PushNotificationService(this._fcm);
 
-  // ── Public initialiser ────────────────────────────────────────────────────
+  // ── Initialise ────────────────────────────────────────────────────────────
 
   Future<void> init() async {
     if (kIsWeb) return;
 
-    // 1. flutter_local_notifications v21 — all parameters are named.
+    // 1. flutter_local_notifications (v21 — all named parameters)
     const initSettings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     );
-    await _localNotifications.initialize(
+    await _local.initialize(
       settings: initSettings,
-      onDidReceiveNotificationResponse: _onForegroundNotificationTapped,
-      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped,
+      onDidReceiveNotificationResponse: _onForegroundLocalTap,
+      onDidReceiveBackgroundNotificationResponse:
+          _onBackgroundLocalNotificationTapped,
     );
 
-    // 2. Create persistent notification channels.
-    final androidPlugin = _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
-      _chatChannelId,
-      _chatChannelName,
-      description: 'New messages from your partner',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-    ));
-    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
-      _onlineChannelId,
-      _onlineChannelName,
-      description: 'Notifies when a partner comes online',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-    ));
+    // 2. Android notification channels (no-op on older APIs)
+    final androidPlugin = _local
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
 
-    // 3. Background handler must be registered before requestPermission.
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _chatChannelId,
+        _chatChannelName,
+        description: 'New messages from your partner',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _onlineChannelId,
+        _onlineChannelName,
+        description: 'Alerts when your partner comes online',
+        importance: Importance.defaultImportance,
+        playSound: true,
+      ),
+    );
+
+    // 3. Background handler — must be registered BEFORE requestPermission
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 4. Wire foreground listener immediately (before permission, safe to do).
+    // 4. Foreground FCM listener
+    //    Android: FCM never shows a system notification in foreground —
+    //    we show one via flutter_local_notifications instead.
+    //    iOS: setForegroundNotificationPresentationOptions below lets the OS
+    //    show the system alert; we skip showing a duplicate local one on iOS.
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('[FCM] Foreground message: ${message.messageId} '
-          '| title: ${message.notification?.title}');
+      debugPrint('[FCM] Foreground: ${message.messageId} '
+          '| ${message.notification?.title}');
+      if (kIsWeb) return;
       final n = message.notification;
       if (n == null) return;
-      _showLocal(
-        id: message.hashCode,
-        title: n.title ?? 'New Message',
-        body: n.body ?? '',
-        channelId: _chatChannelId,
-        channelName: _chatChannelName,
-        payload: message.data['roomId'] as String?,
-      );
+      // Only show local notification on Android (iOS already shows the system
+      // notification via setForegroundNotificationPresentationOptions).
+      // Avoids duplicates on iOS.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        _showLocal(
+          id: message.hashCode,
+          title: n.title ?? 'New Message',
+          body: n.body ?? '',
+          channelId: _chatChannelId,
+          channelName: _chatChannelName,
+          payload: message.data['roomId'] as String?,
+        );
+      }
     });
 
+    // 5. Background → foreground tap (app was in background when user tapped)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('[FCM] Opened from background: ${message.messageId}');
       onNotificationTap?.call(message.data);
     });
 
-    // 5. Non-blocking: request permission + finish setup after app starts.
-    //    This avoids blocking the UI thread with the system permission dialog.
-    _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    ).then((settings) async {
+    // 6. Non-blocking permission + post-permission setup
+    _fcm
+        .requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: false,
+        )
+        .then((settings) async {
       debugPrint('[FCM] Permission: ${settings.authorizationStatus}');
       if (settings.authorizationStatus == AuthorizationStatus.denied) return;
 
@@ -131,22 +159,33 @@ class PushNotificationService {
         sound: true,
       );
 
-      // Handle terminated-state launch notification.
-      final initialMessage = await _fcm.getInitialMessage();
-      if (initialMessage != null) {
-        debugPrint('[FCM] Launched from terminated: ${initialMessage.messageId}');
-        onNotificationTap?.call(initialMessage.data);
+      // Terminated-state: app was launched by tapping a notification.
+      // Store the data for SplashScreen to consume — do NOT try to navigate
+      // here because GoRouter is not mounted in this isolate phase yet.
+      final initial = await _fcm.getInitialMessage();
+      if (initial != null) {
+        debugPrint('[FCM] Launched from terminated: ${initial.messageId}');
+        _pendingInitialMessage = initial.data;
       }
 
-      // Persist token and keep it fresh.
+      // Persist token, then keep it fresh automatically.
       await _refreshAndSaveToken();
-      _fcm.onTokenRefresh.listen((String newToken) {
+      _fcm.onTokenRefresh.listen((newToken) {
         debugPrint('[FCM] Token refreshed');
         _saveTokenToFirestore(newToken);
       });
-    }).catchError((e) {
-      debugPrint('[FCM] Permission request error: $e');
+    }).catchError((Object e) {
+      debugPrint('[FCM] Permission error: $e');
     });
+  }
+
+  // ── Terminated-state navigation helper ───────────────────────────────────
+  // SplashScreen calls this once after auth is confirmed.
+  // Returns the FCM data payload from the tap that launched the app, or null.
+  Map<String, dynamic>? consumeInitialNotification() {
+    final data = _pendingInitialMessage;
+    _pendingInitialMessage = null;
+    return data;
   }
 
   // ── Token management ──────────────────────────────────────────────────────
@@ -154,36 +193,31 @@ class PushNotificationService {
   Future<void> _refreshAndSaveToken() async {
     try {
       final token = await _fcm.getToken();
-      debugPrint('[FCM] Token: $token');
       if (token != null) await _saveTokenToFirestore(token);
     } catch (e) {
-      debugPrint('[FCM] Failed to get token: $e');
+      debugPrint('[FCM] getToken error: $e');
     }
   }
 
   Future<void> _saveTokenToFirestore(String token) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) {
-        debugPrint('[FCM] No authenticated user — token not saved yet');
-        return;
-      }
+      if (uid == null) return; // User not signed in yet — token saved on login
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'fcmToken': token,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
       });
-      debugPrint('[FCM] Token persisted to Firestore (uid=$uid)');
+      debugPrint('[FCM] Token saved (uid=$uid)');
     } catch (e) {
-      debugPrint('[FCM] Failed to save token to Firestore: $e');
+      debugPrint('[FCM] saveToken error: $e');
     }
   }
 
-  /// Call this immediately after a successful login so the FCM token is
-  /// persisted for the newly authenticated user.
+  /// Call after a successful login to persist the FCM token for this session.
   Future<void> updateTokenForCurrentUser() => _refreshAndSaveToken();
 
-  /// Deletes the FCM token from Firestore and from the device.
-  /// Call this during logout so the user stops receiving push notifications.
+  /// Call during logout. Removes the token from Firestore and invalidates it
+  /// on-device so the server stops delivering notifications immediately.
   Future<void> clearTokenForCurrentUser() async {
     if (kIsWeb) return;
     try {
@@ -193,25 +227,28 @@ class PushNotificationService {
           'fcmToken': FieldValue.delete(),
           'fcmTokenUpdatedAt': FieldValue.delete(),
         });
-        debugPrint('[FCM] Token removed from Firestore (uid=$uid)');
       }
       await _fcm.deleteToken();
-      debugPrint('[FCM] Device token deleted');
+      debugPrint('[FCM] Token cleared for logout');
     } catch (e) {
-      debugPrint('[FCM] Failed to clear token: $e');
+      debugPrint('[FCM] clearToken error: $e');
     }
   }
 
-  // ── Notification tap handler (foreground) ─────────────────────────────────
+  // ── Local notification: foreground tap ───────────────────────────────────
 
-  void _onForegroundNotificationTapped(NotificationResponse response) {
-    debugPrint('[FCM] Notification tapped | payload: ${response.payload}');
+  void _onForegroundLocalTap(NotificationResponse response) {
+    debugPrint('[FCM] Local notification tapped | payload: ${response.payload}');
     if (response.payload != null) {
-      onNotificationTap?.call({'roomId': response.payload});
+      // Include type so onNotificationTap handler can route correctly
+      onNotificationTap?.call({'type': 'chat', 'roomId': response.payload});
     }
   }
 
-  // ── Public notification methods ───────────────────────────────────────────
+  // ── Presence-based local notifications (triggered by Firestore listener) ──
+  // These show on the CURRENT device when the partner's Firestore status
+  // changes — no Cloud Function needed for cross-device delivery here
+  // because the current device reads the change via its own stream.
 
   Future<void> showOnlineNotification(String username) => _showLocal(
         id: username.hashCode,
@@ -229,21 +266,7 @@ class PushNotificationService {
         channelName: _onlineChannelName,
       );
 
-  Future<void> showChatMessageNotification({
-    required String senderName,
-    required String message,
-    required String roomId,
-  }) =>
-      _showLocal(
-        id: roomId.hashCode,
-        title: senderName,
-        body: message,
-        channelId: _chatChannelId,
-        channelName: _chatChannelName,
-        payload: roomId,
-      );
-
-  // ── Internal helper ───────────────────────────────────────────────────────
+  // ── Internal: show a local notification ──────────────────────────────────
 
   Future<void> _showLocal({
     required int id,
@@ -264,8 +287,7 @@ class PushNotificationService {
         icon: '@mipmap/ic_launcher',
       ),
     );
-    // v21 named-parameter API
-    await _localNotifications.show(
+    await _local.show(
       id: id,
       title: title,
       body: body,

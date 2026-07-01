@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +24,7 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../calls/presentation/providers/call_provider.dart';
+import '../../../../core/services/presence_service.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepositoryImpl(FirebaseFirestore.instance);
@@ -75,6 +75,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String _searchQuery = '';
 
   StreamSubscription<User?>? _authSub;
+  StreamSubscription<bool>? _partnerOnlineSub;
+  bool _isPartnerOnline = false;
 
   final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
@@ -114,6 +116,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _roomId = _myUid!.compareTo(partnerUid) < 0
                 ? '${_myUid}_$partnerUid'
                 : '${partnerUid}_$_myUid';
+          });
+          _partnerOnlineSub?.cancel();
+          _partnerOnlineSub = ref
+              .read(presenceServiceProvider)
+              .watchPartnerOnline(partnerUid)
+              .listen((isOnline) {
+            if (mounted) setState(() => _isPartnerOnline = isOnline);
           });
         } else {
           if (mounted) {
@@ -318,6 +327,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _typingTimer?.cancel();
     _recordingTimer?.cancel();
     _authSub?.cancel();
+    _partnerOnlineSub?.cancel();
     _audioRecorder.dispose();
     if (_roomId != null && _myUid != null) {
       ref
@@ -469,8 +479,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return ref.watch(roomStreamProvider(_roomId!)).when(
           data: (roomDoc) {
             final roomData = roomDoc.data() as Map<String, dynamic>?;
-            final isRecording =
-                roomData?['recording_$_partnerUid'] ?? false;
+            final isRecording = roomData?['recording_$_partnerUid'] ?? false;
             final isTyping = roomData?['typing_$_partnerUid'] ?? false;
 
             if (isRecording) {
@@ -492,22 +501,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               );
             }
 
-            return StreamBuilder<DatabaseEvent>(
-              stream: FirebaseDatabase.instance
-                  .ref('status/$_partnerUid')
-                  .onValue,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-                final data = snapshot.data!.snapshot.value;
-                final isOnline =
-                    data is Map && data['isOnline'] == true;
-                if (!isOnline) return const SizedBox.shrink();
-                return const Text(
-                  'online',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary),
-                );
-              },
+            return Text(
+              _isPartnerOnline ? 'online' : 'offline',
+              style: TextStyle(
+                fontSize: 13,
+                color: _isPartnerOnline
+                    ? AppColors.success
+                    : AppColors.textSecondary,
+              ),
             );
           },
           loading: () => const SizedBox.shrink(),
