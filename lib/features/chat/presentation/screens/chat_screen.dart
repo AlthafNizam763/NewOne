@@ -25,6 +25,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../calls/presentation/providers/call_provider.dart';
 import '../../../../core/services/presence_service.dart';
+import '../../../../core/services/badge_service.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepositoryImpl(FirebaseFirestore.instance);
@@ -117,6 +118,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ? '${_myUid}_$partnerUid'
                 : '${partnerUid}_$_myUid';
           });
+          // Clear badge when the user opens the chat — all pending
+          // notifications are now visible to them.
+          BadgeService.clear();
+
           _partnerOnlineSub?.cancel();
           _partnerOnlineSub = ref
               .read(presenceServiceProvider)

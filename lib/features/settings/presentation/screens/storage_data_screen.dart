@@ -17,8 +17,9 @@ class StorageDataScreen extends StatefulWidget {
 
 class _StorageDataScreenState extends State<StorageDataScreen> {
   bool _loading = true;
-  double _cacheMb  = 0;
-  bool _autoDownloadWifi   = true;
+  bool _clearingCache = false;
+  double _cacheMb = 0;
+  bool _autoDownloadWifi = true;
   bool _autoDownloadMobile = false;
   String _mediaQuality = 'high';
 
@@ -29,48 +30,59 @@ class _StorageDataScreenState extends State<StorageDataScreen> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final size  = await _getCacheSize();
-    if (!mounted) return;
-    setState(() {
-      _cacheMb           = size;
-      _autoDownloadWifi   = prefs.getBool('auto_dl_wifi')   ?? true;
-      _autoDownloadMobile = prefs.getBool('auto_dl_mobile') ?? false;
-      _mediaQuality       = prefs.getString('media_quality') ?? 'high';
-      _loading            = false;
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final size = await _getCacheSize();
+      if (mounted) {
+        setState(() {
+          _cacheMb = size;
+          _autoDownloadWifi = prefs.getBool('auto_dl_wifi') ?? true;
+          _autoDownloadMobile = prefs.getBool('auto_dl_mobile') ?? false;
+          _mediaQuality = prefs.getString('media_quality') ?? 'high';
+        });
+      }
+    } catch (e) {
+      debugPrint('[StorageData] load error: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
+  // Fully async — uses dir.list() stream to avoid blocking the UI thread.
   Future<double> _getCacheSize() async {
     try {
       final dir = await getTemporaryDirectory();
-      return _dirSize(dir) / (1024 * 1024);
+      double total = 0;
+      await for (final entity
+          in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          try {
+            total += await entity.length();
+          } catch (_) {}
+        }
+      }
+      return total / (1024 * 1024);
     } catch (_) {
       return 0;
     }
   }
 
-  double _dirSize(Directory dir) {
-    double total = 0;
-    try {
-      for (final e in dir.listSync(recursive: true, followLinks: false)) {
-        if (e is File) total += e.lengthSync();
-      }
-    } catch (_) {}
-    return total;
-  }
-
   Future<void> _clearCache() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _loading = true);
+    setState(() => _clearingCache = true);
     try {
       final dir = await getTemporaryDirectory();
-      for (final e in dir.listSync()) {
-        try { await e.delete(recursive: true); } catch (_) {}
+      await for (final entity in dir.list(followLinks: false)) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
       }
     } catch (_) {}
     if (!mounted) return;
-    await _load();
+    setState(() {
+      _cacheMb = 0;
+      _clearingCache = false;
+    });
     messenger.showSnackBar(const SnackBar(content: Text('Cache cleared')));
   }
 
@@ -82,6 +94,7 @@ class _StorageDataScreenState extends State<StorageDataScreen> {
   Future<void> _saveQuality(String q) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('media_quality', q);
+    if (!mounted) return;
     setState(() => _mediaQuality = q);
   }
 
@@ -132,10 +145,17 @@ class _StorageDataScreenState extends State<StorageDataScreen> {
                                   ],
                                 ),
                               ),
-                              OutlinedButton(
-                                onPressed: _clearCache,
-                                child: const Text('Clear'),
-                              ),
+                              _clearingCache
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : OutlinedButton(
+                                      onPressed: _clearCache,
+                                      child: const Text('Clear'),
+                                    ),
                             ],
                           ),
                         ).animate().fade(duration: 300.ms),

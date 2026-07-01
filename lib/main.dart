@@ -7,6 +7,7 @@ import 'config/theme.dart';
 import 'routes/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/presence_service.dart';
+import 'core/services/badge_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,10 +37,12 @@ class AnataNoTameNiApp extends ConsumerStatefulWidget {
   ConsumerState<AnataNoTameNiApp> createState() => _AnataNoTameNiAppState();
 }
 
-class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp> {
+class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Wire notification taps → GoRouter navigation.
     // appRouter.go() works without a BuildContext since GoRouter holds its
     // own navigator state via rootNavigatorKey.
@@ -54,6 +57,22 @@ class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp> {
         appRouter.go('/chat');
       }
     };
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Sync badge from Firestore whenever the app comes back to foreground.
+  /// This catches increments written by the background FCM handler which
+  /// cannot call AppBadgePlus directly (no platform channels in that isolate).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      BadgeService.syncFromFirestore();
+    }
   }
 
   @override

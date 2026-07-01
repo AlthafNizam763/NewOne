@@ -54,7 +54,7 @@ class AboutScreen extends StatelessWidget {
                         _InfoTile(
                           icon: Icons.code_rounded,
                           title: 'Built with',
-                          value: 'Flutter & Firebase',
+                          value: 'Flutter',
                         ),
                         const Divider(height: 1),
                         _InfoTile(
@@ -66,7 +66,7 @@ class AboutScreen extends StatelessWidget {
                         _InfoTile(
                           icon: Icons.security_rounded,
                           title: 'End-to-end',
-                          value: 'Firebase Realtime & Firestore',
+                          value: 'Encrypted',
                         ),
                       ],
                     ),

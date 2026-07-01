@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../firebase_options.dart';
+import 'badge_service.dart';
 
 // ── Notification channels ─────────────────────────────────────────────────────
 // Declared at top level so the background isolate handler can reference them.
@@ -27,6 +28,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM] Background message received: '
       '${message.messageId} | ${message.notification?.title}');
+  // Platform channels (AppBadgePlus) are unavailable in background isolates.
+  // Increment the server-side counter instead; the badge syncs when the app
+  // resumes via BadgeService.syncFromFirestore().
+  await BadgeService.firestoreIncrementInBackground();
 }
 
 // ── Background local-notification tap handler ─────────────────────────────────
@@ -114,12 +119,15 @@ class PushNotificationService {
     //    we show one via flutter_local_notifications instead.
     //    iOS: setForegroundNotificationPresentationOptions below lets the OS
     //    show the system alert; we skip showing a duplicate local one on iOS.
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       debugPrint('[FCM] Foreground: ${message.messageId} '
           '| ${message.notification?.title}');
       if (kIsWeb) return;
       final n = message.notification;
       if (n == null) return;
+      // Increment badge for every foreground notification.
+      await BadgeService.increment();
+      final badgeCount = await BadgeService.getCount();
       // Only show local notification on Android (iOS already shows the system
       // notification via setForegroundNotificationPresentationOptions).
       // Avoids duplicates on iOS.
@@ -131,6 +139,7 @@ class PushNotificationService {
           channelId: _chatChannelId,
           channelName: _chatChannelName,
           payload: message.data['roomId'] as String?,
+          badgeCount: badgeCount,
         );
       }
     });
@@ -138,6 +147,7 @@ class PushNotificationService {
     // 5. Background → foreground tap (app was in background when user tapped)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('[FCM] Opened from background: ${message.messageId}');
+      BadgeService.clear();
       onNotificationTap?.call(message.data);
     });
 
@@ -239,8 +249,8 @@ class PushNotificationService {
 
   void _onForegroundLocalTap(NotificationResponse response) {
     debugPrint('[FCM] Local notification tapped | payload: ${response.payload}');
+    BadgeService.clear();
     if (response.payload != null) {
-      // Include type so onNotificationTap handler can route correctly
       onNotificationTap?.call({'type': 'chat', 'roomId': response.payload});
     }
   }
@@ -250,21 +260,31 @@ class PushNotificationService {
   // changes — no Cloud Function needed for cross-device delivery here
   // because the current device reads the change via its own stream.
 
-  Future<void> showOnlineNotification(String username) => _showLocal(
-        id: username.hashCode,
-        title: '$username is Online',
-        body: '$username just came online! Tap to chat.',
-        channelId: _onlineChannelId,
-        channelName: _onlineChannelName,
-      );
+  Future<void> showOnlineNotification(String username) async {
+    await BadgeService.increment();
+    final count = await BadgeService.getCount();
+    return _showLocal(
+      id: username.hashCode,
+      title: '$username is Online',
+      body: '$username just came online! Tap to chat.',
+      channelId: _onlineChannelId,
+      channelName: _onlineChannelName,
+      badgeCount: count,
+    );
+  }
 
-  Future<void> showComeOnlineRequest(String username) => _showLocal(
-        id: username.hashCode ^ 0x1,
-        title: 'Come Online Request',
-        body: '$username is waiting for you to come online!',
-        channelId: _onlineChannelId,
-        channelName: _onlineChannelName,
-      );
+  Future<void> showComeOnlineRequest(String username) async {
+    await BadgeService.increment();
+    final count = await BadgeService.getCount();
+    return _showLocal(
+      id: username.hashCode ^ 0x1,
+      title: 'Come Online Request',
+      body: '$username is waiting for you to come online!',
+      channelId: _onlineChannelId,
+      channelName: _onlineChannelName,
+      badgeCount: count,
+    );
+  }
 
   // ── Internal: show a local notification ──────────────────────────────────
 
@@ -275,6 +295,7 @@ class PushNotificationService {
     required String channelId,
     required String channelName,
     String? payload,
+    int badgeCount = 0,
   }) async {
     if (kIsWeb) return;
     final details = NotificationDetails(
@@ -285,6 +306,10 @@ class PushNotificationService {
         priority: Priority.high,
         showWhen: true,
         icon: '@mipmap/ic_launcher',
+        number: badgeCount > 0 ? badgeCount : null,
+      ),
+      iOS: DarwinNotificationDetails(
+        badgeNumber: badgeCount > 0 ? badgeCount : null,
       ),
     );
     await _local.show(
