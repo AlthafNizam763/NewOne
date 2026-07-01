@@ -301,17 +301,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         onTap: _changeAvatar,
                       ),
                       _buildSettingsTile(
-                        icon: Icons.link,
-                        title: 'Add Link',
-                        subtitle: 'Share your social profiles',
-                        onTap: () => _notifyComingSoon(context, 'Social links'),
-                      ),
-                      _buildSettingsTile(
                         icon: Icons.storage_outlined,
                         title: 'Storage & Data',
-                        subtitle: 'Network usage and auto-download',
-                        onTap: () =>
-                            _notifyComingSoon(context, 'Storage & data'),
+                        subtitle: 'Cache, auto-download and media quality',
+                        onTap: () => context.push('/storage_data'),
                       ),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
@@ -336,10 +329,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _notifyComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$feature is coming soon')));
-  }
 
   Widget _buildSettingsTile({
     required IconData icon,

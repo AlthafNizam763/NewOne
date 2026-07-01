@@ -6,8 +6,12 @@ import '../features/auth/presentation/screens/register_screen.dart';
 import '../features/home/presentation/screens/home_screen.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
 import '../features/security/presentation/screens/app_lock_screen.dart';
+import '../features/settings/presentation/screens/about_screen.dart';
+import '../features/settings/presentation/screens/help_support_screen.dart';
+import '../features/settings/presentation/screens/language_screen.dart';
 import '../features/settings/presentation/screens/privacy_settings_screen.dart';
 import '../features/settings/presentation/screens/notification_settings_screen.dart';
+import '../features/settings/presentation/screens/storage_data_screen.dart';
 import '../features/settings/presentation/screens/theme_settings_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/calls/presentation/screens/call_screen.dart';
@@ -80,6 +84,22 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/theme_settings',
       builder: (context, state) => const ThemeSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) => const AboutScreen(),
+    ),
+    GoRoute(
+      path: '/help_support',
+      builder: (context, state) => const HelpSupportScreen(),
+    ),
+    GoRoute(
+      path: '/language',
+      builder: (context, state) => const LanguageScreen(),
+    ),
+    GoRoute(
+      path: '/storage_data',
+      builder: (context, state) => const StorageDataScreen(),
     ),
   ],
 );

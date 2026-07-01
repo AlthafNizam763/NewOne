@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/constants/app_colors.dart';
+import 'appearance_provider.dart';
 
 /// Shared glassmorphism design tokens used by screens that build their own
 /// decorations instead of relying purely on the component themes below.
@@ -40,10 +41,37 @@ class AppGlass {
 }
 
 class AppTheme {
-  static ThemeData get darkTheme => _build(Brightness.dark);
-  static ThemeData get lightTheme => _build(Brightness.light);
+  // Backward-compat getters (default appearance).
+  static ThemeData get darkTheme  => forAppearance(Brightness.dark,  const AppearanceState());
+  static ThemeData get lightTheme => forAppearance(Brightness.light, const AppearanceState());
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData forAppearance(Brightness brightness, AppearanceState a) =>
+      _build(brightness, a);
+
+  static TextTheme _buildTextTheme(
+      String fontKey, ThemeData base, Color onSurface, Color muted) {
+    final raw = switch (fontKey) {
+      kFontSpiderman => GoogleFonts.bangersTextTheme(base.textTheme),
+      kFontDracula   => GoogleFonts.cinzelDecorativeTextTheme(base.textTheme),
+      kFontCyberpunk => GoogleFonts.orbitronTextTheme(base.textTheme),
+      kFontNeon      => GoogleFonts.exo2TextTheme(base.textTheme),
+      kFontMinimal   => GoogleFonts.dmSansTextTheme(base.textTheme),
+      _              => GoogleFonts.interTextTheme(base.textTheme),
+    };
+    final colored = raw.apply(bodyColor: onSurface, displayColor: onSurface);
+    return colored.copyWith(
+      headlineLarge:  colored.headlineLarge?.copyWith(fontWeight: FontWeight.w700),
+      headlineMedium: colored.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+      headlineSmall:  colored.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+      titleLarge:     colored.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+      titleMedium:    colored.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      titleSmall:     colored.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      bodyMedium:     colored.bodyMedium?.copyWith(color: onSurface),
+      bodySmall:      colored.bodySmall?.copyWith(color: muted),
+    );
+  }
+
+  static ThemeData _build(Brightness brightness, AppearanceState a) {
     final isDark = brightness == Brightness.dark;
     final base = ThemeData(brightness: brightness, useMaterial3: true);
 
@@ -57,25 +85,9 @@ class AppTheme {
     final glassBorder = isDark ? AppColors.borderStrong : AppColors.borderLight;
     final primary   = isDark ? AppColors.primaryDark  : AppColors.primaryLight;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondaryLight;
-    // Content sitting ON the primary-colored surface must contrast with it.
-    // Dark mode: primary = white  → onPrimary = black.
-    // Light mode: primary = black → onPrimary = white.
     final onPrimary = isDark ? Colors.black : Colors.white;
 
-    final bodyTextTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
-      bodyColor: onSurface,
-      displayColor: onSurface,
-    );
-    final textTheme = bodyTextTheme.copyWith(
-      headlineLarge: bodyTextTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w700),
-      headlineMedium: bodyTextTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-      headlineSmall: bodyTextTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-      titleLarge: bodyTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-      titleMedium: bodyTextTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-      titleSmall: bodyTextTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-      bodyMedium: bodyTextTheme.bodyMedium?.copyWith(color: onSurface),
-      bodySmall: bodyTextTheme.bodySmall?.copyWith(color: onSurfaceMuted),
-    );
+    final textTheme = _buildTextTheme(a.fontTheme, base, onSurface, onSurfaceMuted);
 
     final pillShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppGlass.radiusPill),
@@ -86,6 +98,14 @@ class AppTheme {
     );
 
     return base.copyWith(
+      extensions: [
+        HisokaTheme(
+          accentColor:  a.accentColor,
+          bubbleRadius: a.bubbleRadius,
+          wallpaperKey: a.wallpaperKey,
+          fontTheme:    a.fontTheme,
+        ),
+      ],
       scaffoldBackgroundColor: bg,
       colorScheme: ColorScheme(
         brightness: brightness,

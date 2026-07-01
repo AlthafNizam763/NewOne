@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'config/appearance_provider.dart';
 import 'config/theme.dart';
-import 'config/theme_mode_provider.dart';
 import 'routes/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/presence_service.dart';
@@ -58,16 +58,22 @@ class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp> {
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeControllerProvider);
+    final appearance = ref.watch(appearanceProvider);
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => ref.read(presenceServiceProvider).onUserActivity(),
       child: MaterialApp.router(
         title: 'Hisoka',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: themeMode,
+        theme: AppTheme.forAppearance(Brightness.light, appearance),
+        darkTheme: AppTheme.forAppearance(Brightness.dark, appearance),
+        themeMode: appearance.themeMode,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(appearance.fontScale),
+          ),
+          child: child!,
+        ),
         routerConfig: appRouter,
       ),
     );

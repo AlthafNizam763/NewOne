@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../config/appearance_provider.dart';
 import '../../config/theme.dart';
 import '../constants/app_colors.dart';
 
@@ -19,6 +20,7 @@ class AppBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final wallpaper = HisokaTheme.of(context).wallpaperKey;
     return Container(
       decoration: BoxDecoration(
         gradient: isDark
@@ -27,7 +29,6 @@ class AppBackground extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Barely-visible depth blobs — monochrome, not colored
           Positioned(
             top: -100,
             right: -80,
@@ -38,6 +39,30 @@ class AppBackground extends StatelessWidget {
             left: -100,
             child: _blob(isDark ? const Color(0x05FFFFFF) : const Color(0x04000000)),
           ),
+          if (wallpaper == kWallpaperBlobs) ...[
+            Positioned(
+              top: 200,
+              left: -60,
+              child: _blob(isDark ? const Color(0x05FFFFFF) : const Color(0x04000000)),
+            ),
+            Positioned(
+              bottom: 200,
+              right: -60,
+              child: _blob(isDark ? const Color(0x04FFFFFF) : const Color(0x03000000)),
+            ),
+          ],
+          if (wallpaper == kWallpaperDots)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _DotsPainter(isDark: isDark),
+              ),
+            ),
+          if (wallpaper == kWallpaperGrid)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _GridPainter(isDark: isDark),
+              ),
+            ),
           SafeArea(
             child: Padding(
               padding: padding ?? EdgeInsets.zero,
@@ -60,6 +85,49 @@ class AppBackground extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DotsPainter extends CustomPainter {
+  final bool isDark;
+  const _DotsPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.045)
+      ..style = PaintingStyle.fill;
+    const spacing = 22.0;
+    for (double x = spacing / 2; x < size.width; x += spacing) {
+      for (double y = spacing / 2; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 1.4, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotsPainter old) => old.isDark != isDark;
+}
+
+class _GridPainter extends CustomPainter {
+  final bool isDark;
+  const _GridPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.04)
+      ..strokeWidth = 0.8;
+    const spacing = 32.0;
+    for (double x = 0; x < size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter old) => old.isDark != isDark;
 }
 
 // ── AppSurface ────────────────────────────────────────────────────────────────
