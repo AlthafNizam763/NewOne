@@ -270,11 +270,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             Text(username,
                                 style:
                                     Theme.of(context).textTheme.headlineSmall),
-                            const SizedBox(height: 4),
-                            Text(email,
-                                style: const TextStyle(
-                                    color: AppColors.textSecondary),
-                                textAlign: TextAlign.center),
                             if (bio.isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Text(bio,
