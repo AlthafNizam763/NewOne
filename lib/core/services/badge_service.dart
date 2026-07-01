@@ -42,7 +42,7 @@ class BadgeService {
       final n = count.clamp(0, 99999);
       await _setLocal(n);
       if (await AppBadgePlus.isSupported()) {
-        await AppBadgePlus.updateBadgeCount(n);
+        await AppBadgePlus.updateBadge(n);
       }
     } catch (e) {
       debugPrint('[Badge] setCount error: $e');
