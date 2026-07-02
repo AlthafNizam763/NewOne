@@ -83,9 +83,9 @@ class AppTheme {
         isDark ? AppColors.textSecondary : AppColors.textMutedLight;
     final outline = isDark ? AppColors.outlineDark : AppColors.outlineLight;
     final glassBorder = isDark ? AppColors.borderStrong : AppColors.borderLight;
-    final primary   = isDark ? AppColors.primaryDark  : AppColors.primaryLight;
+    final primary   = a.accentColor;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondaryLight;
-    final onPrimary = isDark ? Colors.black : Colors.white;
+    final onPrimary = a.accentColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 
     final textTheme = _buildTextTheme(a.fontTheme, base, onSurface, onSurfaceMuted);
 

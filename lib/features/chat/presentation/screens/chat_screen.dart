@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
+import '../../../../config/appearance_provider.dart';
 import '../../../../config/theme.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/avatar_util.dart';
@@ -488,20 +489,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final isTyping = roomData?['typing_$_partnerUid'] ?? false;
 
             if (isRecording) {
-              return const Text(
+              return Text(
                 'Recording Voice...',
                 style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.primaryGlow,
+                    color: HisokaTheme.of(context).accentColor,
                     fontWeight: FontWeight.w600),
               );
             }
             if (isTyping) {
-              return const Text(
+              return Text(
                 'typing…',
                 style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.primaryGlow,
+                    color: HisokaTheme.of(context).accentColor,
                     fontWeight: FontWeight.w600),
               );
             }
@@ -555,8 +556,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.push_pin_rounded,
-                              size: 18, color: AppColors.primaryGlow),
+                          Icon(Icons.push_pin_rounded,
+                              size: 18, color: HisokaTheme.of(context).accentColor),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -566,10 +567,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   pinnedIds.length > 1
                                       ? 'Pinned message (${pinnedIds.length})'
                                       : 'Pinned message',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
-                                      color: AppColors.primaryGlow),
+                                      color: HisokaTheme.of(context).accentColor),
                                 ),
                                 Text(text,
                                     maxLines: 1,
@@ -661,8 +662,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildMessageList() {
     if (_roomId == null) {
-      return const Center(
-          child: CircularProgressIndicator(color: AppColors.primaryGlow));
+      return Center(
+          child: CircularProgressIndicator(color: HisokaTheme.of(context).accentColor));
     }
     return ref.watch(chatMessagesProvider(_roomId!)).when(
           data: (snapshot) {
@@ -811,15 +812,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ? Colors.black.withValues(alpha: 0.25)
         : Colors.black.withValues(alpha: 0.06);
 
-    const r = Radius.circular(18);
-    const tail = Radius.circular(4);
+    final rValue = HisokaTheme.of(context).bubbleRadius;
+    final r = Radius.circular(rValue);
+    final tail = Radius.circular((rValue * 0.22).clamp(2.0, 8.0));
     final bubbleRadius = showTail
         ? (isMe
-            ? const BorderRadius.only(
+            ? BorderRadius.only(
                 topLeft: r, topRight: r, bottomLeft: r, bottomRight: tail)
-            : const BorderRadius.only(
+            : BorderRadius.only(
                 topLeft: r, topRight: r, bottomLeft: tail, bottomRight: r))
-        : BorderRadius.circular(18);
+        : BorderRadius.circular(rValue);
 
     // For images/videos, use full fixed width; text messages shrink to content
     final isMediaBubble =
@@ -862,7 +864,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         : Icons.done_rounded),
                 size: 15,
                 color:
-                    seen ? AppColors.primaryGlow : bubbleMutedColor,
+                    seen ? HisokaTheme.of(context).accentColor : bubbleMutedColor,
               ),
             ],
           ],
@@ -1025,9 +1027,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               alpha: isDark ? 0.25 : 0.08),
                           borderRadius:
                               BorderRadius.circular(8),
-                          border: const Border(
+                          border: Border(
                               left: BorderSide(
-                                  color: AppColors.primaryGlow,
+                                  color: HisokaTheme.of(context).accentColor,
                                   width: 3)),
                         ),
                         child: Column(
@@ -1041,8 +1043,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   ? 'You'
                                   : (_partnerUsername ??
                                       'Partner'),
-                              style: const TextStyle(
-                                  color: AppColors.primaryGlow,
+                              style: TextStyle(
+                                  color: HisokaTheme.of(context).accentColor,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12),
                             ),
@@ -1470,7 +1472,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           borderRadius: BorderRadius.circular(AppGlass.radiusSmall),
           border: Border.all(
             color: canView
-                ? AppColors.primaryGlow
+                ? HisokaTheme.of(context).accentColor
                 : AppColors.textSecondary.withValues(alpha: 0.35),
           ),
         ),
@@ -1487,7 +1489,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ? Icons.play_circle_outline_rounded
                           : Icons.looks_one_rounded)),
               color: canView
-                  ? AppColors.primaryGlow
+                  ? HisokaTheme.of(context).accentColor
                   : AppColors.textSecondary,
               size: 28,
             ),
@@ -1517,7 +1519,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           : 'Tap to view · Once only'),
                   style: TextStyle(
                     color: canView
-                        ? AppColors.primaryGlow
+                        ? HisokaTheme.of(context).accentColor
                         : AppColors.textSecondary
                             .withValues(alpha: 0.7),
                     fontSize: 12,
@@ -1570,13 +1572,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.edit_rounded,
-                      size: 18, color: AppColors.primaryGlow),
+                  Icon(Icons.edit_rounded,
+                      size: 18, color: HisokaTheme.of(context).accentColor),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text('Editing message',
                         style: TextStyle(
-                            color: AppColors.primaryGlow,
+                            color: HisokaTheme.of(context).accentColor,
                             fontWeight: FontWeight.bold,
                             fontSize: 13)),
                   ),
@@ -1617,8 +1619,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           _replyMessage!['sender'] == _myUid
                               ? 'You'
                               : (_partnerUsername ?? 'Partner'),
-                          style: const TextStyle(
-                              color: AppColors.primaryGlow,
+                          style: TextStyle(
+                              color: HisokaTheme.of(context).accentColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 13),
                         ),
