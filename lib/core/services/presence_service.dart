@@ -42,6 +42,9 @@ class PresenceService with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _setupRtdbPresence();
     _setFirestoreOnline(true);
+    // Write RTDB status immediately — don't wait for .info/connected, which can
+    // be delayed or blocked, causing the RTDB node to stay stale.
+    _setRtdbOnline(true);
     _resetInactivityTimer();
   }
 
@@ -147,19 +150,48 @@ class PresenceService with WidgetsBindingObserver {
     }
   }
 
-  /// Returns a stream of the partner's real-time online status from RTDB.
-  /// More accurate than Firestore because RTDB uses onDisconnect server-side.
+  /// Returns a stream of the partner's real-time online status.
+  ///
+  /// Merges Firestore and RTDB so either source going online triggers a true.
+  /// Firestore is the reliable primary (written immediately on every open/resume).
+  /// RTDB supplements with server-side onDisconnect accuracy on network drops.
   Stream<bool> watchPartnerOnline(String partnerUid) {
-    return FirebaseDatabase.instance
+    bool rtdbOnline = false;
+    bool fsOnline = false;
+    // ignore: close_sinks — closed in onCancel
+    final controller = StreamController<bool>.broadcast();
+
+    final rtdbSub = FirebaseDatabase.instance
         .ref('status/$partnerUid')
         .onValue
-        .map((event) {
-      final data = event.snapshot.value;
-      if (data is Map) {
-        return data['isOnline'] as bool? ?? false;
-      }
-      return false;
-    });
+        .listen(
+      (event) {
+        final data = event.snapshot.value;
+        rtdbOnline = data is Map ? (data['isOnline'] as bool? ?? false) : false;
+        if (!controller.isClosed) controller.add(rtdbOnline || fsOnline);
+      },
+      onError: (_) {},
+    );
+
+    final fsSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(partnerUid)
+        .snapshots()
+        .listen(
+      (snap) {
+        fsOnline = snap.data()?['isOnline'] as bool? ?? false;
+        if (!controller.isClosed) controller.add(rtdbOnline || fsOnline);
+      },
+      onError: (_) {},
+    );
+
+    controller.onCancel = () {
+      rtdbSub.cancel();
+      fsSub.cancel();
+      controller.close();
+    };
+
+    return controller.stream;
   }
 
   void _teardown() {
