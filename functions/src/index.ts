@@ -200,7 +200,7 @@ export const sendAlertNotification = onDocumentCreated(
     const senderSnap = await db.collection("users").doc(senderId).get();
     const senderName = (senderSnap.data()?.username as string | undefined) ?? "Someone";
 
-    const body = `${senderName} wants your attention.`;
+    const body = `${senderName} is alerting you.`;
 
     const fcmMessage: Message = {
       token: fcmToken,

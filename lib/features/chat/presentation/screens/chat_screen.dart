@@ -2429,28 +2429,32 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
+  final List<StreamSubscription<dynamic>> _playerSubs = [];
+
   @override
   void initState() {
     super.initState();
     _player.setSourceUrl(widget.url);
-    _player.onPlayerStateChanged.listen((state) {
-      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
-    });
-    _player.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _duration = d);
-    });
-    _player.onPositionChanged.listen((p) {
-      if (mounted) setState(() => _position = p);
-    });
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-          _hasStarted = false;
-          _position = Duration.zero;
-        });
-      }
-    });
+    _playerSubs.addAll([
+      _player.onPlayerStateChanged.listen((state) {
+        if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
+      }),
+      _player.onDurationChanged.listen((d) {
+        if (mounted) setState(() => _duration = d);
+      }),
+      _player.onPositionChanged.listen((p) {
+        if (mounted) setState(() => _position = p);
+      }),
+      _player.onPlayerComplete.listen((_) {
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+            _hasStarted = false;
+            _position = Duration.zero;
+          });
+        }
+      }),
+    ]);
   }
 
   Future<void> _togglePlayback() async {
@@ -2466,6 +2470,9 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
 
   @override
   void dispose() {
+    for (final sub in _playerSubs) {
+      sub.cancel();
+    }
     _player.dispose();
     super.dispose();
   }
