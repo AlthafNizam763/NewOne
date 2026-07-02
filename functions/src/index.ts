@@ -156,3 +156,110 @@ export const sendChatNotification = onDocumentCreated(
     return null;
   }
 );
+
+// ── Cloud Function: sendAlertNotification ─────────────────────────────────────
+// Triggered when User A writes to alerts/{alertId}.
+// Sends a high-priority "🚨 Alert" push to User B's device via Admin SDK.
+const ALERT_CHANNEL_ID = "alerts_channel";
+
+export const sendAlertNotification = onDocumentCreated(
+  {
+    document: "alerts/{alertId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+
+    const alert = snap.data();
+    const senderId   = alert.senderId   as string | undefined;
+    const receiverId = alert.receiverId as string | undefined;
+    const roomId     = alert.roomId     as string | undefined;
+
+    if (!senderId || !receiverId) {
+      console.log("[FCM] Alert: missing senderId/receiverId — skipping");
+      return null;
+    }
+
+    // Read receiver FCM token
+    const receiverRef  = db.collection("users").doc(receiverId);
+    const receiverSnap = await receiverRef.get();
+
+    if (!receiverSnap.exists) {
+      console.log(`[FCM] Alert receiver ${receiverId} not found — skipping`);
+      return null;
+    }
+
+    const fcmToken = receiverSnap.data()?.fcmToken as string | undefined;
+    if (!fcmToken) {
+      console.log(`[FCM] Alert: no token for ${receiverId} — skipping`);
+      return null;
+    }
+
+    // Read sender username from Firestore (authoritative, client can't spoof)
+    const senderSnap = await db.collection("users").doc(senderId).get();
+    const senderName = (senderSnap.data()?.username as string | undefined) ?? "Someone";
+
+    const body = `${senderName} wants your attention.`;
+
+    const fcmMessage: Message = {
+      token: fcmToken,
+      notification: {
+        title: "🚨 Alert",
+        body,
+      },
+      data: {
+        type:       "alert",
+        alertId:    event.params.alertId,
+        senderId,
+        senderName,
+        receiverId,
+        roomId:     roomId ?? "",
+        message:    body,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId:             ALERT_CHANNEL_ID,
+          priority:              "max",
+          defaultSound:          true,
+          defaultVibrateTimings: true,
+          clickAction:           "FLUTTER_NOTIFICATION_CLICK",
+        },
+      },
+      apns: {
+        headers: { "apns-priority": "10" },
+        payload: {
+          aps: {
+            sound: "default",
+            badge: 1,
+          },
+        },
+      },
+    };
+
+    try {
+      const messageId = await messaging.send(fcmMessage);
+      console.log(
+        `[FCM] Alert OK → receiver=${receiverId} alertId=${event.params.alertId} msgId=${messageId}`
+      );
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      if (
+        error.code === "messaging/invalid-registration-token" ||
+        error.code === "messaging/registration-token-not-registered"
+      ) {
+        console.warn(`[FCM] Alert: stale token for ${receiverId} — pruning`);
+        await receiverRef.update({
+          fcmToken:          FieldValue.delete(),
+          fcmTokenUpdatedAt: FieldValue.delete(),
+        });
+        return null;
+      }
+      console.error(`[FCM] Alert send error for ${receiverId}:`, error);
+      throw error;
+    }
+
+    return null;
+  }
+);

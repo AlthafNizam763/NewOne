@@ -167,6 +167,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  Future<void> _sendAlert() async {
+    if (_myUid == null || _partnerUid == null || _roomId == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('alerts').add({
+        'senderId': _myUid,
+        'receiverId': _partnerUid,
+        'roomId': _roomId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alert sent!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to send alert: $e')));
+      }
+    }
+  }
+
   void _sendMessage() {
     if (_msgCtrl.text.trim().isEmpty ||
         _roomId == null ||
@@ -466,10 +488,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               setState(() => _isSearching = true);
             } else if (val == 'clear') {
               _clearChat();
+            } else if (val == 'alert') {
+              _sendAlert();
             }
           },
           itemBuilder: (context) => [
             const PopupMenuItem(value: 'search', child: Text('Search')),
+            const PopupMenuItem(
+              value: 'alert',
+              child: Row(
+                children: [
+                  Icon(Icons.notifications_active_rounded, size: 18),
+                  SizedBox(width: 8),
+                  Text('Send Alert'),
+                ],
+              ),
+            ),
             const PopupMenuItem(value: 'clear', child: Text('Clear Chat')),
           ],
         ),

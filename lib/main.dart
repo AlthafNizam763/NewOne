@@ -53,8 +53,21 @@ class _AnataNoTameNiAppState extends ConsumerState<AnataNoTameNiApp>
     // consumeInitialNotification().
     ref.read(pushNotificationServiceProvider).onNotificationTap = (data) {
       final type = data['type'] as String?;
-      if (type == 'chat') {
-        appRouter.go('/chat');
+      switch (type) {
+        case 'chat':
+        case 'alert':
+        case 'location':
+          appRouter.go('/chat');
+        case 'call':
+        case 'video_call':
+          final callId = data['callId'] as String?;
+          if (callId != null && callId.isNotEmpty) {
+            appRouter.go('/call/$callId');
+          } else {
+            appRouter.go('/home');
+          }
+        default:
+          appRouter.go('/home');
       }
     };
   }

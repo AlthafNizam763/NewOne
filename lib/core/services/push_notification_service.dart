@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -18,6 +20,9 @@ const _chatChannelName = 'Chat Messages';
 
 const _onlineChannelId   = 'online_status_channel';
 const _onlineChannelName = 'Online Status';
+
+const _alertChannelId   = 'alerts_channel';
+const _alertChannelName = 'Alerts';
 
 // ── Background message handler ────────────────────────────────────────────────
 // Must be a top-level function — runs in a separate isolate when the app is
@@ -110,6 +115,16 @@ class PushNotificationService {
         playSound: true,
       ),
     );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _alertChannelId,
+        _alertChannelName,
+        description: 'Attention alerts from your partner',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      ),
+    );
 
     // 3. Background handler — must be registered BEFORE requestPermission
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -132,13 +147,16 @@ class PushNotificationService {
       // notification via setForegroundNotificationPresentationOptions).
       // Avoids duplicates on iOS.
       if (defaultTargetPlatform == TargetPlatform.android) {
+        final type = message.data['type'] as String? ?? 'chat';
+        final channelId   = type == 'alert' ? _alertChannelId   : _chatChannelId;
+        final channelName = type == 'alert' ? _alertChannelName : _chatChannelName;
         _showLocal(
           id: message.hashCode,
           title: n.title ?? 'New Message',
           body: n.body ?? '',
-          channelId: _chatChannelId,
-          channelName: _chatChannelName,
-          payload: message.data['roomId'] as String?,
+          channelId: channelId,
+          channelName: channelName,
+          payload: jsonEncode(message.data),
           badgeCount: badgeCount,
         );
       }
@@ -250,8 +268,14 @@ class PushNotificationService {
   void _onForegroundLocalTap(NotificationResponse response) {
     debugPrint('[FCM] Local notification tapped | payload: ${response.payload}');
     BadgeService.clear();
-    if (response.payload != null) {
-      onNotificationTap?.call({'type': 'chat', 'roomId': response.payload});
+    final payload = response.payload;
+    if (payload == null) return;
+    try {
+      final data = jsonDecode(payload) as Map<String, dynamic>;
+      onNotificationTap?.call(data);
+    } catch (_) {
+      // Legacy: plain roomId string — treat as chat tap
+      onNotificationTap?.call({'type': 'chat', 'roomId': payload});
     }
   }
 

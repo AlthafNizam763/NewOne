@@ -28,6 +28,18 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // alerts collection — cross-device attention pushes
+    match /alerts/{alertId} {
+      // Only the sender can create an alert; senderId must match their uid
+      allow create: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.senderId;
+      // Both sender and receiver can read; nobody can edit or delete
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.senderId ||
+         request.auth.uid == resource.data.receiverId);
+      allow update, delete: if false;
+    }
+
     // chat_rooms collection
     match /chat_rooms/{roomId} {
       // Must be authenticated and a participant to read/write the chat room
